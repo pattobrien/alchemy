@@ -1,4 +1,5 @@
 import * as Effect from "effect/Effect";
+import { Unowned } from "../AdoptPolicy.ts";
 import { deepEqual, isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
@@ -468,10 +469,37 @@ export const RulesetProvider = () =>
       return attrsOf(observed);
     }),
 
+    // With state, read by the stored id. Without it, find the repository's ruleset by name and
+    // target so `--adopt` takes over an existing one instead of creating a duplicate.
     read: Effect.fn(function* ({ olds, output }) {
-      if (output === undefined) return undefined;
-      const observed = yield* getRuleset(olds, output.rulesetId);
-      return observed === undefined ? undefined : attrsOf(observed);
+      if (output !== undefined) {
+        const observed = yield* getRuleset(olds, output.rulesetId);
+        return observed === undefined ? undefined : attrsOf(observed);
+      }
+      const octokit = yield* octokitFor(olds.baseUrl);
+      const rulesets = yield* Effect.tryPromise({
+        try: () =>
+          octokit.paginate(octokit.rest.repos.getRepoRulesets, {
+            owner: olds.owner,
+            repo: olds.repository,
+            includes_parents: false,
+            per_page: 100,
+          }),
+        catch: (e) => e as Error & { status?: number },
+      }).pipe(
+        Effect.catchIf(
+          (error) => error.status === 404,
+          () => Effect.succeed([]),
+        ),
+      );
+      const match = rulesets.find(
+        (ruleset) =>
+          ruleset.name === olds.name &&
+          ruleset.target === (olds.target ?? "branch"),
+      );
+      if (match === undefined) return undefined;
+      const observed = yield* getRuleset(olds, match.id);
+      return observed === undefined ? undefined : Unowned(attrsOf(observed));
     }),
 
     list: Effect.fn(function* () {
