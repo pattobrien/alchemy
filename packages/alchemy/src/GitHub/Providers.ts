@@ -3,6 +3,7 @@ import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
 import { App, AppProvider } from "./App.ts";
+import { AppInstallation, AppInstallationProvider } from "./AppInstallation.ts";
 import { type GitHubAuthOptions, makeGitHubAuth } from "./AuthProvider.ts";
 import {
   BranchProtection,
@@ -55,6 +56,7 @@ export const providers = (options?: ProvidersOptions) =>
     Providers,
     Provider.collection([
       App,
+      AppInstallation,
       BranchProtection,
       Collaborator,
       Comment,
@@ -76,6 +78,7 @@ export const providers = (options?: ProvidersOptions) =>
     Layer.provide(
       Layer.mergeAll(
         AppProvider(),
+        AppInstallationProvider(),
         BranchProtectionProvider(),
         CollaboratorProvider(),
         CommentProvider(),
