@@ -1,4 +1,5 @@
 export * from "./App.ts";
+export * from "./AppInstallation.ts";
 export * as Auth from "./AuthProvider.ts";
 export * from "./BranchProtection.ts";
 export * from "./Collaborator.ts";

@@ -1,4 +1,4 @@
-// Shared harness for the GitHub App live tests.
+// Shared harness for the GitHub App / AppInstallation live tests.
 //
 // GitHub has no API to register, install, delete or re-permission an app, so
 // those steps are driven through the real GitHub UI by Playwright, using a
@@ -66,6 +66,21 @@ export const appOctokit = (
   appId: number,
   privateKey: Redacted.Redacted<string>,
 ): RestOctokit => Octokit.appOctokit(appId, privateKey, undefined);
+
+export const installationOctokit = (
+  appId: number,
+  privateKey: Redacted.Redacted<string>,
+  installationId: number,
+): Effect.Effect<RestOctokit, Cause.UnknownError> =>
+  Effect.tryPromise(async () => {
+    const { data } = await appOctokit(
+      appId,
+      privateKey,
+    ).rest.apps.createInstallationAccessToken({
+      installation_id: installationId,
+    });
+    return new RestOctokit({ auth: data.token });
+  });
 
 // 200 → the app exists, 404 → it does not. Uses the caller's (owner) token,
 // which can see the org's private apps.
@@ -192,6 +207,55 @@ const deleteApp = async (page: Page, slug: string) => {
   await page.waitForURL((u) => !u.pathname.includes(`/apps/${slug}`));
 };
 
+export interface InstallChoice {
+  readonly account: string;
+  /** Omit to install on all repositories. */
+  readonly repositories?: ReadonlyArray<string>;
+}
+
+const installApp = async (page: Page, choice: InstallChoice) => {
+  if (/\/installations\/new\/?$/.test(new URL(page.url()).pathname)) {
+    await page
+      .locator('a[href*="/installations/new/permissions?target_id="]')
+      .filter({ hasText: choice.account })
+      .first()
+      .click();
+    await guard(page);
+  }
+  if (choice.repositories === undefined) {
+    await page.locator("#install_target_all").check();
+  } else {
+    await page.locator("#install_target_selected").check();
+    for (const repo of choice.repositories) {
+      const search = page.getByPlaceholder("Search for a repository");
+      if (!(await search.isVisible())) {
+        await page.getByText("Select repositories", { exact: true }).click();
+      }
+      await search.fill(repo);
+      await page
+        .locator("#repository-menu-list button.select-menu-item")
+        .filter({
+          has: page.locator("strong", { hasText: new RegExp(`^/${repo}$`) }),
+        })
+        .click();
+    }
+    await page
+      .locator("input.js-selected-repository-field")
+      .nth(choice.repositories.length - 1)
+      .waitFor({ state: "attached" });
+  }
+  await page.locator('button[data-octo-click="install_integration"]').click();
+  await guard(page);
+  await page.waitForURL((u) => !u.pathname.includes("/installations/new"));
+};
+
+/** UI step an installation owner takes after the app raised permissions. */
+export const acceptPermissionsInUi = (reviewUrl: string) =>
+  withPage(reviewUrl, async (page) => {
+    await page.getByRole("button", { name: /Accept new permissions/i }).click();
+    await guard(page);
+  });
+
 /** UI fix a human would make: raise one permission on the app registration. */
 export const setAppPermission = (input: {
   readonly slug: string;
@@ -292,6 +356,7 @@ export interface Autopilot {
 
 export const autopilot = (
   options: {
+    readonly install?: InstallChoice;
     /** A human who never acts: URLs are recorded but nothing is clicked. */
     readonly idle?: boolean;
   } = {},
@@ -319,6 +384,15 @@ export const autopilot = (
     }
     const advanced = pathname.match(/\/settings\/apps\/([^/]+)\/advanced$/);
     if (advanced) return drive((page) => deleteApp(page, advanced[1]!));
+    if (/^\/apps\/[^/]+\/installations\/new/.test(pathname)) {
+      const choice = options.install;
+      if (choice === undefined) {
+        return unrouted(
+          `Provider opened ${url} but the test gave no install choice`,
+        );
+      }
+      return drive((page) => installApp(page, choice));
+    }
     return unrouted(
       `Provider opened ${url}, which the autopilot has no route for`,
     );
