@@ -169,7 +169,7 @@ export const Stack: Context.ServiceClass<
       };
     };
   };
-  <Self, Shape>(): {
+  <Self, Shape, Stages extends string = string>(): {
     (stackName: string): Effect.Effect<Self> & {
       new (_: never): Output.ToOutput<Shape>;
       readonly stackName: string;
@@ -178,8 +178,10 @@ export const Stack: Context.ServiceClass<
         effect: Effect.Effect<A, ConfigError, Req>,
       ) => Effect.Effect<CompiledStack<A>, ConfigError> &
         ConfiguredStackMeta<NoInfer<Req>>;
+      // a Stack that declares its stages gets a key per stage, so indexing it
+      // stays defined under noUncheckedIndexedAccess
       stage: {
-        [stage: string]: Effect.Effect<Self>;
+        readonly [S in Stages]: Effect.Effect<Self>;
       };
     };
   };
