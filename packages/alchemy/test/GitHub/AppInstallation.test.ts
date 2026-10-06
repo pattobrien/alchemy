@@ -1,6 +1,7 @@
 import { adopt } from "@/AdoptPolicy.ts";
 import * as GitHub from "@/GitHub/index.ts";
 import { Octokit } from "@/GitHub/Octokit.ts";
+import * as Interaction from "@/Interaction.ts";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import * as Test from "@/Test/Alchemy.ts";
 import { isUserFacing } from "@/UserFacingError.ts";
@@ -10,6 +11,7 @@ import type * as Redacted from "effect/Redacted";
 import {
   acceptPermissionsInUi,
   appName,
+  appExists,
   appOctokit,
   autopilot,
   deleteAppIfExists,
@@ -190,7 +192,7 @@ describe(
 );
 
 test.provider(
-  "installs by click, syncs selected repositories, refuses a selection switch, and uninstalls",
+  "installs through the browser, syncs selected repositories, reports a selection switch without a browser, and uninstalls",
   (stack) =>
     Effect.gen(function* () {
       const id = "install";
@@ -215,13 +217,12 @@ test.provider(
       });
       expect(isUserFacing(noTerminal)).toBe(true);
 
-      const human = autopilot({
-        install: { account: owner, repositories: [repoA] },
-      });
-      const { installation } = yield* human
+      const pilot = autopilot();
+      const { installation } = yield* pilot
         .run(stack.deploy(program(id, { installation: selected(repoA) })))
         .pipe(withManualStepTimeout("2 minutes"));
-      expect(human.launched).toEqual([expect.stringContaining(installUrl)]);
+      expect(pilot.launched).toContain(installUrl);
+      expect(pilot.prompts).toEqual([]);
       expect(installation!.installationId).toBeGreaterThan(0);
       expect(installation!.account).toBe(owner);
       expect(installation!.repositorySelection).toBe("selected");
@@ -280,10 +281,11 @@ test.provider(
       ).toEqual([repoB]);
       expect(quiet.launched).toEqual([]);
 
-      // selected → all has no API.
+      // selected → all has no API; without a browser it is reported.
+      const idle = autopilot({ idle: true });
       const switched = failureOf(
         yield* Effect.exit(
-          quiet.run(
+          idle.run(
             stack.deploy(
               program(id, {
                 installation: { account: owner, repositorySelection: "all" },
@@ -300,7 +302,8 @@ test.provider(
         message: expect.stringContaining(settingsUrl),
       });
       expect(isUserFacing(switched)).toBe(true);
-      expect(quiet.launched).toEqual([]);
+      expect(idle.launched).toEqual([]);
+      expect(idle.prompts).toEqual([]);
 
       // Default retain: removing the resource drops its state and keeps the
       // installation.
@@ -355,7 +358,7 @@ test.provider(
 );
 
 test.provider(
-  "pending permission approval fails with the review URL and passes after acceptance",
+  "pending permission approval without a browser fails with the review URL and passes after acceptance",
   (stack) =>
     Effect.gen(function* () {
       const id = "perms";
@@ -365,9 +368,7 @@ test.provider(
         .run(stack.deploy(program(id, {})))
         .pipe(withManualStepTimeout("2 minutes"));
       yield* ensureFixtureRepos(yield* Octokit);
-      const { app, installation } = yield* autopilot({
-        install: { account: owner, repositories: [repoA] },
-      })
+      const { app, installation } = yield* autopilot()
         .run(stack.deploy(program(id, { installation: selected(repoA) })))
         .pipe(withManualStepTimeout("2 minutes"));
 
@@ -384,7 +385,9 @@ test.provider(
         installation: selected(repoA),
       };
       const pending = failureOf(
-        yield* Effect.exit(autopilot().run(stack.deploy(program(id, raised)))),
+        yield* Effect.exit(
+          autopilot({ idle: true }).run(stack.deploy(program(id, raised))),
+        ),
       );
       const reviewUrl = `https://github.com/organizations/${owner}/settings/installations/${installation!.installationId}/permissions/update`;
       expect(pending).toMatchObject({
@@ -410,4 +413,153 @@ test.provider(
       Effect.ensuring(cleanup(stack, appName("perms")).pipe(Effect.ignore)),
     ),
   browserTest,
+);
+
+const unattended = { ...browserTest, timeout: 240_000 };
+
+const nonInteractive = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.provide(Interaction.layerNonInteractive()),
+    withManualStepTimeout("2 minutes"),
+  );
+
+test.provider(
+  "installs unattended",
+  (stack) =>
+    Effect.gen(function* () {
+      const id = "unattended";
+      yield* cleanup(stack, appName(id));
+      yield* ensureFixtureRepos(yield* Octokit);
+
+      const pilot = autopilot();
+      const { app, installation } = yield* nonInteractive(
+        pilot.run(
+          stack.deploy(
+            program(id, { installation: selected(repoA), destroy: true }),
+          ),
+        ),
+      );
+      expect(pilot.prompts).toEqual([]);
+      expect(pilot.launched).toContain(
+        `https://github.com/apps/${app.slug}/installations/new`,
+      );
+      const { data: live } = yield* Effect.tryPromise(() =>
+        appOctokit(app.appId, app.privateKey).rest.apps.getInstallation({
+          installation_id: installation!.installationId,
+        }),
+      );
+      expect(live.id).toBe(installation!.installationId);
+      expect(live.repository_selection).toBe("selected");
+
+      yield* nonInteractive(pilot.run(stack.destroy()));
+      expect(pilot.prompts).toEqual([]);
+      expect(yield* appExists(yield* Octokit, app.slug)).toBe(false);
+    }).pipe(
+      Effect.ensuring(
+        cleanup(stack, appName("unattended")).pipe(Effect.ignore),
+      ),
+    ),
+  unattended,
+);
+
+test.provider(
+  "switches selected→all unattended",
+  (stack) =>
+    Effect.gen(function* () {
+      const id = "switch";
+      yield* cleanup(stack, appName(id));
+      yield* ensureFixtureRepos(yield* Octokit);
+
+      const { app, installation } = yield* autopilot()
+        .run(stack.deploy(program(id, { installation: selected(repoA) })))
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(installation!.repositorySelection).toBe("selected");
+
+      const pilot = autopilot();
+      const switched = yield* pilot
+        .run(
+          stack.deploy(
+            program(id, {
+              installation: { account: owner, repositorySelection: "all" },
+            }),
+          ),
+        )
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(switched.installation!.installationId).toBe(
+        installation!.installationId,
+      );
+      expect(switched.installation!.repositorySelection).toBe("all");
+      expect(switched.installation!.repositories).toEqual([]);
+      const { data: live } = yield* Effect.tryPromise(() =>
+        appOctokit(app.appId, app.privateKey).rest.apps.getInstallation({
+          installation_id: installation!.installationId,
+        }),
+      );
+      expect(live.repository_selection).toBe("all");
+      expect(pilot.launched).toContain(
+        `https://github.com/organizations/${owner}/settings/installations/${installation!.installationId}`,
+      );
+      expect(pilot.prompts).toEqual([]);
+    }).pipe(
+      Effect.ensuring(cleanup(stack, appName("switch")).pipe(Effect.ignore)),
+    ),
+  unattended,
+);
+
+test.provider(
+  "accepts pending permissions unattended",
+  (stack) =>
+    Effect.gen(function* () {
+      const id = "perms-auto";
+      yield* cleanup(stack, appName(id));
+      yield* ensureFixtureRepos(yield* Octokit);
+
+      const { app, installation } = yield* autopilot()
+        .run(stack.deploy(program(id, { installation: selected(repoA) })))
+        .pipe(withManualStepTimeout("2 minutes"));
+
+      yield* setAppPermission({
+        slug: app.slug,
+        permission: "issues",
+        access: "write",
+      });
+
+      const pilot = autopilot();
+      const accepted = yield* pilot
+        .run(
+          stack.deploy(
+            program(id, {
+              permissions: { issues: "write" },
+              installation: selected(repoA),
+            }),
+          ),
+        )
+        .pipe(withManualStepTimeout("2 minutes"));
+      expect(accepted.installation!.installationId).toBe(
+        installation!.installationId,
+      );
+      expect(accepted.installation!.permissions).toMatchObject({
+        issues: "write",
+      });
+      const { data: live } = yield* Effect.tryPromise(() =>
+        appOctokit(app.appId, app.privateKey).rest.apps.getInstallation({
+          installation_id: installation!.installationId,
+        }),
+      );
+      expect(
+        GitHub.installationPermissionsPending(
+          { issues: "write" },
+          Object.fromEntries(Object.entries(live.permissions)),
+        ),
+      ).toEqual([]);
+      expect(pilot.launched).toContain(
+        `https://github.com/organizations/${owner}/settings/installations/${installation!.installationId}/permissions/update`,
+      );
+      expect(pilot.prompts).toEqual([]);
+    }).pipe(
+      Effect.ensuring(
+        cleanup(stack, appName("perms-auto")).pipe(Effect.ignore),
+      ),
+    ),
+  unattended,
 );
