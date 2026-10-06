@@ -11,6 +11,7 @@ import { State } from "@/State";
 import * as Test from "@/Test/Alchemy.ts";
 import { isUserFacing } from "@/UserFacingError.ts";
 import { describe, expect, it } from "alchemy-test";
+import { generateKeyPairSync } from "node:crypto";
 import * as Cause from "effect/Cause";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
@@ -36,7 +37,6 @@ import {
   setAppVisibilityInUi,
   withManualStepTimeout,
 } from "./app-harness.ts";
-import { pkcs1PrivateKey, pkcs8PrivateKey } from "./fixtures/app-keys.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(
@@ -560,22 +560,34 @@ describe(
       expect(drift).toHaveLength(5);
     });
 
+    const rsaKeyPair = Effect.sync(() => {
+      const { privateKey } = generateKeyPairSync("rsa", {
+        modulusLength: 2048,
+      });
+      return {
+        pkcs1: privateKey.export({ type: "pkcs1", format: "pem" }).toString(),
+        pkcs8: privateKey.export({ type: "pkcs8", format: "pem" }).toString(),
+      };
+    });
+
     it("re-encodes a PKCS#1 private key as PKCS#8", () => {
+      const rsaKey = Effect.runSync(rsaKeyPair);
       const converted = Effect.runSync(
-        GitHub.appPrivateKeyPkcs8("my-app", Redacted.make(pkcs1PrivateKey)),
+        GitHub.appPrivateKeyPkcs8("my-app", Redacted.make(rsaKey.pkcs1)),
       );
       expect(Redacted.isRedacted(converted)).toBe(true);
       expect(
         Redacted.value(converted).startsWith("-----BEGIN PRIVATE KEY-----"),
       ).toBe(true);
-      expect(Redacted.value(converted)).toBe(pkcs8PrivateKey);
+      expect(Redacted.value(converted)).toBe(rsaKey.pkcs8);
     });
 
     it("passes a PKCS#8 private key through unchanged", () => {
+      const rsaKey = Effect.runSync(rsaKeyPair);
       const converted = Effect.runSync(
-        GitHub.appPrivateKeyPkcs8("my-app", Redacted.make(pkcs8PrivateKey)),
+        GitHub.appPrivateKeyPkcs8("my-app", Redacted.make(rsaKey.pkcs8)),
       );
-      expect(Redacted.value(converted)).toBe(pkcs8PrivateKey);
+      expect(Redacted.value(converted)).toBe(rsaKey.pkcs8);
     });
 
     it("rejects a malformed private key with a typed error naming the slug", () => {
