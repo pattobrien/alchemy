@@ -17,21 +17,16 @@ export class BrowserUnavailable extends Data.TaggedError("BrowserUnavailable")<{
 }
 
 /** A page driver threw; a full-page screenshot was captured when possible. */
-export class BrowserAutomationFailed extends Data.TaggedError(
-  "BrowserAutomationFailed",
-)<{
+export class BrowserAutomationFailed extends Data.TaggedError("BrowserAutomationFailed")<{
   readonly url: string;
   readonly screenshot: string | undefined;
   readonly cause: unknown;
 }> {
   readonly [UserFacingError] = true;
   override get message(): string {
-    const detail =
-      this.cause instanceof Error ? this.cause.message : String(this.cause);
+    const detail = this.cause instanceof Error ? this.cause.message : String(this.cause);
     const screenshot =
-      this.screenshot === undefined
-        ? ""
-        : ` Screenshot saved to ${this.screenshot}.`;
+      this.screenshot === undefined ? "" : ` Screenshot saved to ${this.screenshot}.`;
     return `Browser automation failed at ${this.url}: ${detail}.${screenshot}`;
   }
 }
@@ -63,8 +58,7 @@ const INSTALL_HINT =
   "Install the optional peer dependency with `pnpm add -D playwright-core` and make sure Google Chrome is installed.";
 
 const isBrowserError = (cause: unknown): cause is BrowserError =>
-  cause instanceof BrowserUnavailable ||
-  cause instanceof BrowserAutomationFailed;
+  cause instanceof BrowserUnavailable || cause instanceof BrowserAutomationFailed;
 
 const describeCause = (cause: unknown): string =>
   cause instanceof Error ? cause.message : String(cause);
@@ -80,26 +74,20 @@ const launchFailure = (channel: string, cause: unknown): BrowserUnavailable => {
 
 const launchContext = (
   options: BrowserOptions,
-): Effect.Effect<
-  BrowserContext,
-  BrowserUnavailable,
-  FileSystem.FileSystem | Scope.Scope
-> =>
+): Effect.Effect<BrowserContext, BrowserUnavailable, FileSystem.FileSystem | Scope.Scope> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
     const channel = options.channel ?? "chrome";
     const headless = options.headless ?? true;
-    yield* fs
-      .makeDirectory(options.profileDir, { recursive: true, mode: 0o700 })
-      .pipe(
-        Effect.andThen(fs.chmod(options.profileDir, 0o700)),
-        Effect.mapError(
-          (cause) =>
-            new BrowserUnavailable({
-              message: `Could not create the browser profile directory '${options.profileDir}': ${cause.message}`,
-            }),
-        ),
-      );
+    yield* fs.makeDirectory(options.profileDir, { recursive: true, mode: 0o700 }).pipe(
+      Effect.andThen(fs.chmod(options.profileDir, 0o700)),
+      Effect.mapError(
+        (cause) =>
+          new BrowserUnavailable({
+            message: `Could not create the browser profile directory '${options.profileDir}': ${cause.message}`,
+          }),
+      ),
+    );
     const playwright = yield* Effect.tryPromise({
       try: () => import("playwright-core"),
       catch: (cause) =>
@@ -119,9 +107,7 @@ const launchContext = (
       (context) => Effect.ignore(Effect.tryPromise(() => context.close())),
     );
     yield* Effect.sync(() =>
-      context.setDefaultTimeout(
-        Duration.toMillis(options.defaultTimeout ?? "30 seconds"),
-      ),
+      context.setDefaultTimeout(Duration.toMillis(options.defaultTimeout ?? "30 seconds")),
     );
     return context;
   });
@@ -146,9 +132,9 @@ export const layer = (
         fs.makeTempDirectory({ prefix: "alchemy-browser-" }).pipe(
           Effect.flatMap((dir) => {
             const file = path.join(dir, "failure.png");
-            return Effect.tryPromise(() =>
-              page.screenshot({ path: file, fullPage: true }),
-            ).pipe(Effect.as(file));
+            return Effect.tryPromise(() => page.screenshot({ path: file, fullPage: true })).pipe(
+              Effect.as(file),
+            );
           }),
           Effect.orElseSucceed(() => undefined),
         );
@@ -181,15 +167,11 @@ export const layer = (
                 ? Effect.fail(cause)
                 : screenshotOf(page).pipe(
                     Effect.flatMap((screenshot) =>
-                      Effect.fail(
-                        new BrowserAutomationFailed({ url, screenshot, cause }),
-                      ),
+                      Effect.fail(new BrowserAutomationFailed({ url, screenshot, cause })),
                     ),
                   ),
             ),
-            Effect.ensuring(
-              Effect.ignore(Effect.tryPromise(() => page.close())),
-            ),
+            Effect.ensuring(Effect.ignore(Effect.tryPromise(() => page.close()))),
           );
         });
 

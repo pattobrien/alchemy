@@ -19,9 +19,9 @@ const resolveProfile = (target: Target) =>
  * Unattended with `GITHUB_BROWSER_USERNAME`, `GITHUB_BROWSER_PASSWORD` and
  * `GITHUB_BROWSER_TOTP_SECRET`; otherwise a window opens for the user.
  */
-export const browserLogin = Effect.fn(
-  "Alchemist.provider.github.browser-login",
-)(function* (target: BrowserLoginTarget) {
+export const browserLogin = Effect.fn("Alchemist.provider.github.browser-login")(function* (
+  target: BrowserLoginTarget,
+) {
   const profile = yield* resolveProfile(target);
   const env = yield* optionsFromEnv;
   const result = yield* login({
@@ -34,9 +34,9 @@ export const browserLogin = Effect.fn(
 });
 
 /** Delete the persisted browser profile for the selected Alchemy profile. */
-export const browserLogout = Effect.fn(
-  "Alchemist.provider.github.browser-logout",
-)(function* (target: Target) {
+export const browserLogout = Effect.fn("Alchemist.provider.github.browser-logout")(function* (
+  target: Target,
+) {
   const profile = yield* resolveProfile(target);
   const fs = yield* FileSystem.FileSystem;
   const profileDir = browserProfileDir(profile);

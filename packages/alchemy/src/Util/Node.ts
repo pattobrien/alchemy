@@ -1,5 +1,5 @@
-import * as Effect from "effect/Effect";
 import * as NodeNet from "node:net";
+import * as Effect from "effect/Effect";
 
 /**
  * The process's working directory, captured ONCE at module load.
@@ -70,9 +70,7 @@ export const disableCrossSpawnChdir = (): void => {
 export const nodeLoaderArgs = (entry: string): string[] => [
   "--import",
   import.meta.resolve(
-    /\.[cm]?tsx?$/.test(entry)
-      ? "../../bin/register-dev-mode.js"
-      : "../../bin/register-oxc.js",
+    /\.[cm]?tsx?$/.test(entry) ? "../../bin/register-dev-mode.js" : "../../bin/register-oxc.js",
   ),
 ];
 
@@ -86,13 +84,9 @@ export const nodeLoaderArgs = (entry: string): string[] => [
  * `bin/cli.js` mirrors this predicate inline — it must run under plain node
  * before any `.ts` can load. Keep the two in sync.
  */
-export const isRegisterHooksSupported = (
-  version = process.versions.node,
-): boolean => {
+export const isRegisterHooksSupported = (version = process.versions.node): boolean => {
   const [major = 0, minor = 0] = version.split(".").map(Number);
-  return (
-    (major === 22 && minor >= 15) || (major === 23 && minor >= 5) || major >= 24
-  );
+  return (major === 22 && minor >= 15) || (major === 23 && minor >= 5) || major >= 24;
 };
 
 /**
@@ -109,20 +103,32 @@ export const findAvailablePort = (host = "127.0.0.1") =>
     server.once("error", (error) => resume(Effect.fail(error)));
     server.listen(0, host, () => {
       const address = server.address();
-      const port =
-        typeof address === "object" && address !== null
-          ? address.port
-          : undefined;
+      const port = typeof address === "object" && address !== null ? address.port : undefined;
       server.close((error) => {
         if (error) {
           resume(Effect.fail(error));
         } else if (port !== undefined) {
           resume(Effect.succeed(port));
         } else {
-          resume(
-            Effect.fail(new Error("Failed to allocate an available port")),
-          );
+          resume(Effect.fail(new Error("Failed to allocate an available port")));
         }
       });
+    });
+  });
+
+/**
+ * Try to bind `port` on `host`; resolves `true` when the port is free.
+ *
+ * The listener is closed immediately, so the port is only observed
+ * available, not reserved. The caller should bind promptly and still handle
+ * the race window.
+ */
+export const isPortFree = (port: number, host: string) =>
+  Effect.callback<boolean>((resume) => {
+    const server = NodeNet.createServer();
+    server.unref();
+    server.once("error", () => resume(Effect.succeed(false)));
+    server.listen(port, host, () => {
+      server.close(() => resume(Effect.succeed(true)));
     });
   });

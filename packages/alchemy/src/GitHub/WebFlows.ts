@@ -22,12 +22,9 @@ const webFlow =
     drive: (page: Page, input: Input) => Promise<A>,
   ): WebFlow<Input, A> =>
   (input) =>
-    GitHubBrowser.use((browser) =>
-      browser.page(url(input), (page) => drive(page, input)),
-    );
+    GitHubBrowser.use((browser) => browser.page(url(input), (page) => drive(page, input)));
 
-const escapeRegExp = (text: string) =>
-  text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 const pathOf = (page: Page) => new URL(page.url()).pathname;
 
@@ -56,10 +53,7 @@ class ChangeRejected extends Error {
 const failIfRejected = async (page: Page) => {
   const error = page.locator(ERROR_FLASH).filter({ visible: true });
   if ((await error.count()) > 0) {
-    throw new ChangeRejected(
-      page.url(),
-      (await error.first().innerText()).trim(),
-    );
+    throw new ChangeRejected(page.url(), (await error.first().innerText()).trim());
   }
 };
 
@@ -86,9 +80,7 @@ const submitAndAwait = async (
   }
   const response = await posted;
   if (response.status() >= 400) {
-    throw new Error(
-      `Saving changes on ${page.url()} failed with HTTP ${response.status()}`,
-    );
+    throw new Error(`Saving changes on ${page.url()} failed with HTTP ${response.status()}`);
   }
   await page.waitForLoadState();
   await guard(page);
@@ -157,8 +149,7 @@ export const deleteAppPage = async (
 };
 
 export const deleteApp = webFlow(
-  (input: { readonly advancedUrl: string; readonly slug: string }) =>
-    input.advancedUrl,
+  (input: { readonly advancedUrl: string; readonly slug: string }) => input.advancedUrl,
   deleteAppPage,
 );
 
@@ -189,19 +180,14 @@ const pickedRepositories = async (page: Page) =>
       .allInnerTexts()
   ).map((text) => text.trim().split("/").pop() ?? "");
 
-const applyRepositorySelection = async (
-  page: Page,
-  input: RepositorySelectionInput,
-) => {
+const applyRepositorySelection = async (page: Page, input: RepositorySelectionInput) => {
   if (input.repositorySelection === "all") {
     await page.locator(REPOSITORY_PICKER.all).check();
     return;
   }
   const wanted = input.repositories ?? [];
   if (wanted.length === 0) {
-    throw new Error(
-      "repositorySelection 'selected' needs at least one repository",
-    );
+    throw new Error("repositorySelection 'selected' needs at least one repository");
   }
   await page.locator(REPOSITORY_PICKER.selected).check();
   for (const repository of await pickedRepositories(page)) {
@@ -248,16 +234,9 @@ export interface InstallAppInput extends RepositorySelectionInput {
   readonly account: string;
 }
 
-export const installAppPage = async (
-  page: Page,
-  input: InstallAppInput,
-): Promise<void> => {
+export const installAppPage = async (page: Page, input: InstallAppInput): Promise<void> => {
   if (/\/installations\/new\/?$/.test(pathOf(page))) {
-    await page
-      .locator(INSTALL.accountLink)
-      .filter({ hasText: input.account })
-      .first()
-      .click();
+    await page.locator(INSTALL.accountLink).filter({ hasText: input.account }).first().click();
     await guard(page);
   }
   await applyRepositorySelection(page, input);
@@ -266,10 +245,7 @@ export const installAppPage = async (
   await page.waitForURL((url) => !url.pathname.includes("/installations/new"));
 };
 
-export const installApp = webFlow(
-  (input: InstallAppInput) => input.installUrl,
-  installAppPage,
-);
+export const installApp = webFlow((input: InstallAppInput) => input.installUrl, installAppPage);
 
 // /settings/installations/{id}/permissions/update
 const ACCEPT_PERMISSIONS = {
@@ -313,14 +289,10 @@ export const setInstallationRepositorySelectionPage = async (
   await page.goto(input.settingsUrl);
   await guard(page);
   const radio = page.locator(
-    input.repositorySelection === "all"
-      ? REPOSITORY_PICKER.all
-      : REPOSITORY_PICKER.selected,
+    input.repositorySelection === "all" ? REPOSITORY_PICKER.all : REPOSITORY_PICKER.selected,
   );
   if (!(await radio.isChecked())) {
-    throw new Error(
-      `Saving the repository selection did not take effect on ${page.url()}`,
-    );
+    throw new Error(`Saving the repository selection did not take effect on ${page.url()}`);
   }
 };
 
@@ -355,11 +327,7 @@ export interface AppPermissionsInput {
   readonly events?: ReadonlyArray<string>;
 }
 
-const selectPermission = async (
-  page: Page,
-  permission: string,
-  access: PermissionAccess,
-) => {
+const selectPermission = async (page: Page, permission: string, access: PermissionAccess) => {
   const item = page.locator(APP_PERMISSIONS.item(permission, access));
   if ((await item.count()) === 0) {
     throw new Error(
@@ -369,9 +337,7 @@ const selectPermission = async (
   if ((await item.getAttribute("aria-checked")) === "true") return;
   await item.evaluate(openCollapsedGroups);
   const menu = page.locator(APP_PERMISSIONS.menu, { has: item });
-  await page
-    .locator(`[id="${await menu.getAttribute("aria-labelledby")}"]`)
-    .click();
+  await page.locator(`[id="${await menu.getAttribute("aria-labelledby")}"]`).click();
   await item.click();
 };
 
@@ -417,8 +383,7 @@ export const updateAppPermissions = webFlow(
 // /settings/installations/{id} (Danger zone: Suspend / Unsuspend)
 const INSTALLATION_SUSPENSION = {
   submit: 'form[action$="/suspended"] [type=submit]',
-  suspendedForm:
-    'form[action$="/suspended"]:has(input[name="_method"][value="delete"])',
+  suspendedForm: 'form[action$="/suspended"]:has(input[name="_method"][value="delete"])',
   postPath: "/suspended",
 } as const;
 
@@ -431,9 +396,7 @@ const showsSuspended = async (page: Page) => {
   await page.locator(INSTALLATION_SUSPENSION.submit).first().waitFor({
     state: "attached",
   });
-  return (
-    (await page.locator(INSTALLATION_SUSPENSION.suspendedForm).count()) > 0
-  );
+  return (await page.locator(INSTALLATION_SUSPENSION.suspendedForm).count()) > 0;
 };
 
 export const setInstallationSuspensionPage = async (
@@ -466,8 +429,7 @@ export const setInstallationSuspension = webFlow(
 
 // {owner settings}/apps/{slug}/advanced (Make public / Make private)
 const APP_VISIBILITY = {
-  form: (visibility: "public" | "private") =>
-    `form[action$="/${visibility}"]:has([type=submit])`,
+  form: (visibility: "public" | "private") => `form[action$="/${visibility}"]:has([type=submit])`,
   submit: "[type=submit]",
 } as const;
 
@@ -524,8 +486,7 @@ export const setAppVisibilityPage = async (
   if (await submit.isDisabled()) {
     return { set: false, reason: "the control is disabled" };
   }
-  const action = new URL((await form.getAttribute("action")) ?? "", page.url())
-    .pathname;
+  const action = new URL((await form.getAttribute("action")) ?? "", page.url()).pathname;
   const accept = (dialog: Dialog) => void dialog.accept();
   page.on("dialog", accept);
   try {
@@ -541,9 +502,7 @@ export const setAppVisibilityPage = async (
   await page.goto(input.advancedUrl);
   await guard(page);
   if ((await readAppVisibilityPage(page, input)) !== input.public) {
-    throw new Error(
-      `Making ${input.slug} ${wanted} did not take effect on ${page.url()}`,
-    );
+    throw new Error(`Making ${input.slug} ${wanted} did not take effect on ${page.url()}`);
   }
   return { set: true };
 };
@@ -556,8 +515,7 @@ export const setAppVisibility = webFlow(
 // {owner settings}/apps/{slug} (General: callback URLs, setup URL, webhook Active)
 const APP_GENERAL = {
   callbackRow: ".js-application-callback-url",
-  callbackUrl:
-    'input[name^="integration[application_callback_urls_attributes]"][name$="[url]"]',
+  callbackUrl: 'input[name^="integration[application_callback_urls_attributes]"][name$="[url]"]',
   addCallbackUrl: "Add redirect URI",
   deleteCallbackUrl: "Delete",
   requestOauthOnInstall: "#integration_request_oauth_on_install",
@@ -583,10 +541,7 @@ export interface ReadAppGeneralSettingsInput {
  * General settings to converge to. The setup URL is left alone while
  * `requestOauthOnInstall` is set, since GitHub disables it then.
  */
-export type DesiredAppGeneralSettings = Omit<
-  AppGeneralSettings,
-  "webhookActive"
-> & {
+export type DesiredAppGeneralSettings = Omit<AppGeneralSettings, "webhookActive"> & {
   /** Omit to leave the webhook's Active checkbox untouched. */
   readonly webhookActive?: boolean;
 };
@@ -626,10 +581,7 @@ export const appGeneralSettingsFormDrift = (
   const fields: AppGeneralSettingsDriftField[] = [];
   const wantedUrls = [...desired.callbackUrls].sort();
   const liveUrls = [...observed.callbackUrls].sort();
-  if (
-    wantedUrls.length !== liveUrls.length ||
-    wantedUrls.some((url, i) => url !== liveUrls[i])
-  ) {
+  if (wantedUrls.length !== liveUrls.length || wantedUrls.some((url, i) => url !== liveUrls[i])) {
     fields.push({
       field: "callbackUrls",
       desired: desired.callbackUrls,
@@ -660,10 +612,7 @@ export const appGeneralSettingsFormDrift = (
       live: observed.requestOauthOnInstall,
     });
   }
-  if (
-    desired.webhookActive !== undefined &&
-    desired.webhookActive !== observed.webhookActive
-  ) {
+  if (desired.webhookActive !== undefined && desired.webhookActive !== observed.webhookActive) {
     fields.push({
       field: "webhookActive",
       desired: desired.webhookActive,
@@ -684,17 +633,11 @@ const callbackRowUrls = async (rows: Locator) => {
   return urls;
 };
 
-const readAppGeneralSettingsForm = async (
-  page: Page,
-): Promise<AppGeneralSettings> => {
+const readAppGeneralSettingsForm = async (page: Page): Promise<AppGeneralSettings> => {
   const oauth = page.locator(APP_GENERAL.requestOauthOnInstall);
   await oauth.waitFor({ state: "attached" });
-  const callbackUrls = (await callbackRowUrls(callbackRows(page))).filter(
-    (url) => url !== "",
-  );
-  const setupUrl = (
-    await page.locator(APP_GENERAL.setupUrl).inputValue()
-  ).trim();
+  const callbackUrls = (await callbackRowUrls(callbackRows(page))).filter((url) => url !== "");
+  const setupUrl = (await page.locator(APP_GENERAL.setupUrl).inputValue()).trim();
   return {
     callbackUrls,
     requestOauthOnInstall: await oauth.isChecked(),
@@ -707,10 +650,7 @@ const readAppGeneralSettingsForm = async (
 // Rows are filled first, added at the end next, and deleted last from the
 // bottom up, so the index of every row still to visit never shifts. A row
 // without a Delete button (the last one left) is cleared instead.
-const applyCallbackUrls = async (
-  page: Page,
-  desired: ReadonlyArray<string>,
-) => {
+const applyCallbackUrls = async (page: Page, desired: ReadonlyArray<string>) => {
   const rows = callbackRows(page);
   const urls = await callbackRowUrls(rows);
   const missing = desired.filter((url) => !urls.includes(url));
@@ -725,9 +665,7 @@ const applyCallbackUrls = async (
     }
   }
   for (const url of missing) {
-    await page
-      .getByRole("button", { name: APP_GENERAL.addCallbackUrl })
-      .click();
+    await page.getByRole("button", { name: APP_GENERAL.addCallbackUrl }).click();
     await rows.last().locator(APP_GENERAL.callbackUrl).fill(url);
   }
   for (const index of stale.reverse()) {
@@ -748,10 +686,7 @@ export const readAppGeneralSettings = webFlow(
   readAppGeneralSettingsForm,
 );
 
-const identityChanges = async (
-  page: Page,
-  input: SyncAppGeneralSettingsInput,
-) => {
+const identityChanges = async (page: Page, input: SyncAppGeneralSettingsInput) => {
   const changes: Array<readonly [Locator, string]> = [];
   for (const [selector, value] of [
     [APP_SETTINGS.name, input.name],
@@ -776,9 +711,7 @@ export const syncAppGeneralSettingsPage = async (
 ): Promise<AppGeneralSettings> => {
   const { desired } = input;
   const observed = await readAppGeneralSettingsForm(page);
-  const drift = new Set(
-    appGeneralSettingsFormDrift(desired, observed).map((f) => f.field),
-  );
+  const drift = new Set(appGeneralSettingsFormDrift(desired, observed).map((f) => f.field));
   const identity = await identityChanges(page, input);
   if (drift.size === 0 && identity.length === 0) return observed;
   for (const [field, value] of identity) await field.fill(value);
@@ -786,19 +719,13 @@ export const syncAppGeneralSettingsPage = async (
     await applyCallbackUrls(page, desired.callbackUrls);
   }
   // The setup URL is disabled while OAuth on install is checked.
-  await page
-    .locator(APP_GENERAL.requestOauthOnInstall)
-    .setChecked(desired.requestOauthOnInstall);
+  await page.locator(APP_GENERAL.requestOauthOnInstall).setChecked(desired.requestOauthOnInstall);
   if (!desired.requestOauthOnInstall) {
     await page.locator(APP_GENERAL.setupUrl).fill(desired.setupUrl ?? "");
   }
-  await page
-    .locator(APP_GENERAL.setupOnUpdate)
-    .setChecked(desired.setupOnUpdate);
+  await page.locator(APP_GENERAL.setupOnUpdate).setChecked(desired.setupOnUpdate);
   if (desired.webhookActive !== undefined) {
-    await page
-      .locator(APP_GENERAL.webhookActive)
-      .setChecked(desired.webhookActive);
+    await page.locator(APP_GENERAL.webhookActive).setChecked(desired.webhookActive);
   }
   await submitAndAwait(page, APP_SETTINGS.postPath, () =>
     page.getByRole("button", { name: SAVE_CHANGES }).first().click(),

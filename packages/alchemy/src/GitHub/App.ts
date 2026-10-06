@@ -1,3 +1,5 @@
+import { createPrivateKey, randomUUID } from "node:crypto";
+import http from "node:http";
 import type { Octokit as RestOctokit } from "@octokit/rest";
 import * as Data from "effect/Data";
 import * as Deferred from "effect/Deferred";
@@ -5,8 +7,6 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { createPrivateKey, randomUUID } from "node:crypto";
-import http from "node:http";
 import { Unowned } from "../AdoptPolicy.ts";
 import { deepEqual } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
@@ -14,12 +14,7 @@ import { Resource } from "../Resource.ts";
 import { UserFacingError } from "../UserFacingError.ts";
 import { githubWebOrigin } from "./BaseUrl.ts";
 import { manualStep, pollUntilDefined, withBrowser } from "./ManualStep.ts";
-import {
-  appOctokit,
-  effectiveGitHubBaseUrl,
-  octokitFor,
-  unlessStatus,
-} from "./Octokit.ts";
+import { appOctokit, effectiveGitHubBaseUrl, octokitFor, unlessStatus } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 import {
   appGeneralSettingsFormDrift,
@@ -309,9 +304,7 @@ export const App = Resource<App>("GitHub.App", {
 });
 
 /** The registration exists, but adopting it needs its private key. */
-export class GitHubAppAdoptionNeedsKey extends Data.TaggedError(
-  "GitHubAppAdoptionNeedsKey",
-)<{
+export class GitHubAppAdoptionNeedsKey extends Data.TaggedError("GitHubAppAdoptionNeedsKey")<{
   readonly slug: string;
   readonly url: string;
 }> {
@@ -322,9 +315,7 @@ export class GitHubAppAdoptionNeedsKey extends Data.TaggedError(
 }
 
 /** The registration exists, but rejects the private key alchemy holds. */
-export class GitHubAppKeyRejected extends Data.TaggedError(
-  "GitHubAppKeyRejected",
-)<{
+export class GitHubAppKeyRejected extends Data.TaggedError("GitHubAppKeyRejected")<{
   readonly slug: string;
   readonly url: string;
 }> {
@@ -335,9 +326,7 @@ export class GitHubAppKeyRejected extends Data.TaggedError(
 }
 
 /** The private key is not a valid PEM private key. */
-export class GitHubAppKeyInvalid extends Data.TaggedError(
-  "GitHubAppKeyInvalid",
-)<{
+export class GitHubAppKeyInvalid extends Data.TaggedError("GitHubAppKeyInvalid")<{
   readonly slug: string;
   readonly cause: unknown;
 }> {
@@ -348,10 +337,7 @@ export class GitHubAppKeyInvalid extends Data.TaggedError(
 }
 
 /** The app's private key as PKCS#8 PEM, whether it was PKCS#1 or PKCS#8. */
-export const appPrivateKeyPkcs8 = (
-  slug: string,
-  privateKey: Redacted.Redacted<string>,
-) =>
+export const appPrivateKeyPkcs8 = (slug: string, privateKey: Redacted.Redacted<string>) =>
   Effect.try({
     try: () =>
       Redacted.make(
@@ -373,9 +359,7 @@ export class GitHubAppManifestStateMismatch extends Data.TaggedError(
 }
 
 /** The manifest callback carries no `code`. */
-export class GitHubAppManifestCodeMissing extends Data.TaggedError(
-  "GitHubAppManifestCodeMissing",
-)<{
+export class GitHubAppManifestCodeMissing extends Data.TaggedError("GitHubAppManifestCodeMissing")<{
   readonly message: string;
 }> {
   readonly [UserFacingError] = true;
@@ -391,9 +375,7 @@ export class GitHubAppEventsRequireWebhook extends Data.TaggedError(
 }
 
 /** GitHub accepts at most 10 callback URLs. */
-export class GitHubAppTooManyCallbackUrls extends Data.TaggedError(
-  "GitHubAppTooManyCallbackUrls",
-)<{
+export class GitHubAppTooManyCallbackUrls extends Data.TaggedError("GitHubAppTooManyCallbackUrls")<{
   readonly message: string;
 }> {
   readonly [UserFacingError] = true;
@@ -434,9 +416,7 @@ export const validateAppProps = (props: AppProps) =>
     }
     const callbackUrls = props.callbackUrls ?? [];
     const duplicates = [
-      ...new Set(
-        callbackUrls.filter((url, i) => callbackUrls.indexOf(url) !== i),
-      ),
+      ...new Set(callbackUrls.filter((url, i) => callbackUrls.indexOf(url) !== i)),
     ];
     if (duplicates.length > 0) {
       return yield* new GitHubAppDuplicateCallbackUrls({
@@ -510,10 +490,7 @@ export const appSettingsUrl = (options: {
   `${ownerSettings(options.owner, options.baseUrl)}/apps/${options.slug}${options.page === undefined ? "" : `/${options.page}`}`;
 
 /** The manifest GitHub's registration page accepts (snake_case). */
-export const appManifest = (
-  props: AppProps,
-  options: { readonly redirectUrl: string },
-) => ({
+export const appManifest = (props: AppProps, options: { readonly redirectUrl: string }) => ({
   name: props.name,
   url: props.url,
   description: props.description,
@@ -526,13 +503,9 @@ export const appManifest = (
       : { url: props.webhook.url, active: props.webhook.active ?? true },
   redirect_url: options.redirectUrl,
   request_oauth_on_install: props.requestOauthOnInstall ?? false,
-  ...(props.callbackUrls === undefined
-    ? {}
-    : { callback_urls: props.callbackUrls }),
+  ...(props.callbackUrls === undefined ? {} : { callback_urls: props.callbackUrls }),
   ...(props.setupUrl === undefined ? {} : { setup_url: props.setupUrl }),
-  ...(props.setupOnUpdate === undefined
-    ? {}
-    : { setup_on_update: props.setupOnUpdate }),
+  ...(props.setupOnUpdate === undefined ? {} : { setup_on_update: props.setupOnUpdate }),
 });
 
 /** The slug GitHub derives from an app name, unless `slug` is given. */
@@ -623,15 +596,12 @@ export const appDrift = (
   return fields;
 };
 
-const desiredGeneralSettings = (
-  props: AppProps,
-): DesiredAppGeneralSettings => ({
+const desiredGeneralSettings = (props: AppProps): DesiredAppGeneralSettings => ({
   callbackUrls: props.callbackUrls ?? [],
   requestOauthOnInstall: props.requestOauthOnInstall ?? false,
   setupUrl: props.setupUrl || undefined,
   setupOnUpdate: props.setupOnUpdate ?? false,
-  webhookActive:
-    props.webhook === undefined ? undefined : (props.webhook.active ?? true),
+  webhookActive: props.webhook === undefined ? undefined : (props.webhook.active ?? true),
 });
 
 /**
@@ -642,37 +612,26 @@ const desiredGeneralSettings = (
 export const appGeneralSettingsDrift = (
   desired: AppProps,
   observed: AppGeneralSettings,
-): AppDriftField[] =>
-  appGeneralSettingsFormDrift(desiredGeneralSettings(desired), observed);
+): AppDriftField[] => appGeneralSettingsFormDrift(desiredGeneralSettings(desired), observed);
 
 /**
  * General settings that differ between two sets of props, with unknown
  * live values. An app registered without `webhook` has Active unticked.
  */
-export const changedAppGeneralSettings = (
-  olds: AppProps,
-  news: AppProps,
-): AppDriftField[] =>
+export const changedAppGeneralSettings = (olds: AppProps, news: AppProps): AppDriftField[] =>
   appGeneralSettingsDrift(news, {
     ...desiredGeneralSettings(olds),
-    webhookActive:
-      olds.webhook === undefined ? false : (olds.webhook.active ?? true),
+    webhookActive: olds.webhook === undefined ? false : (olds.webhook.active ?? true),
   }).map((field) => ({ ...field, live: undefined }));
 
 /** `public` against the visibility the Advanced settings page shows. */
-export const appVisibilityDrift = (
-  desired: AppProps,
-  live: boolean,
-): AppDriftField[] =>
+export const appVisibilityDrift = (desired: AppProps, live: boolean): AppDriftField[] =>
   (desired.public ?? false) === live
     ? []
     : [{ field: "public", desired: desired.public ?? false, live }];
 
 /** A `public` prop that differs between two sets of props, live unknown. */
-export const changedAppVisibility = (
-  olds: AppProps,
-  news: AppProps,
-): AppDriftField[] =>
+export const changedAppVisibility = (olds: AppProps, news: AppProps): AppDriftField[] =>
   appVisibilityDrift(news, olds.public ?? false).map((field) => ({
     ...field,
     live: undefined,
@@ -690,9 +649,7 @@ export const appPermissionChanges = (
   ...Object.fromEntries(
     Object.keys(definedPermissions(live))
       .filter(
-        (name) =>
-          desired[name] === undefined &&
-          !(name === "metadata" && live.metadata === "read"),
+        (name) => desired[name] === undefined && !(name === "metadata" && live.metadata === "read"),
       )
       .map((name) => [name, "none" as const]),
   ),
@@ -714,15 +671,10 @@ interface LiveApp {
   readonly public: boolean | undefined;
 }
 
-type AppSecrets = Pick<
-  App["Attributes"],
-  "clientSecret" | "privateKey" | "webhookSecret"
->;
+type AppSecrets = Pick<App["Attributes"], "clientSecret" | "privateKey" | "webhookSecret">;
 
 /** The app's bot user does not resolve by its login. */
-export class GitHubAppBotUserNotFound extends Data.TaggedError(
-  "GitHubAppBotUserNotFound",
-)<{
+export class GitHubAppBotUserNotFound extends Data.TaggedError("GitHubAppBotUserNotFound")<{
   readonly login: string;
 }> {
   readonly [UserFacingError] = true;
@@ -732,9 +684,7 @@ export class GitHubAppBotUserNotFound extends Data.TaggedError(
 }
 
 const botUserId = (octokit: RestOctokit, login: string) =>
-  unlessStatus([404], () =>
-    octokit.rest.users.getByUsername({ username: login }),
-  ).pipe(
+  unlessStatus([404], () => octokit.rest.users.getByUsername({ username: login })).pipe(
     Effect.flatMap((found) =>
       found === undefined
         ? Effect.fail(new GitHubAppBotUserNotFound({ login }))
@@ -783,9 +733,9 @@ const attrsOf = (options: {
   });
 
 const appBySlug = (octokit: RestOctokit, slug: string) =>
-  unlessStatus([404], () =>
-    octokit.rest.apps.getBySlug({ app_slug: slug }),
-  ).pipe(Effect.map((found) => found?.data ?? undefined));
+  unlessStatus([404], () => octokit.rest.apps.getBySlug({ app_slug: slug })).pipe(
+    Effect.map((found) => found?.data ?? undefined),
+  );
 
 // `GET /app` as the app itself. A deleted app rejects its own JWT, so a
 // rejection only means "gone" once the slug no longer resolves either. The
@@ -803,11 +753,7 @@ const observeRegistration = (
 ) =>
   Effect.gen(function* () {
     const response = yield* unlessStatus([401, 404], () =>
-      appOctokit(
-        app.appId,
-        app.privateKey,
-        baseUrl,
-      ).rest.apps.getAuthenticated(),
+      appOctokit(app.appId, app.privateKey, baseUrl).rest.apps.getAuthenticated(),
     );
     if (response?.data) return response.data;
     if ((yield* appBySlug(octokit, app.slug)) !== undefined) {
@@ -833,9 +779,7 @@ export class GitHubAppVisibilityNeedsBrowser extends Data.TaggedError(
 }
 
 /** GitHub refused to change the app's visibility. */
-export class GitHubAppVisibilityRefused extends Data.TaggedError(
-  "GitHubAppVisibilityRefused",
-)<{
+export class GitHubAppVisibilityRefused extends Data.TaggedError("GitHubAppVisibilityRefused")<{
   readonly slug: string;
   readonly reason: string;
 }> {
@@ -871,10 +815,7 @@ const observeApp = (
   });
 
 // Props override stored secrets, so a rotated key can be handed over.
-const credentials = (
-  news: AppProps,
-  output: App["Attributes"],
-): AppSecrets => ({
+const credentials = (news: AppProps, output: App["Attributes"]): AppSecrets => ({
   privateKey: news.privateKey ?? output.privateKey,
   clientSecret: news.clientSecret ?? output.clientSecret,
   webhookSecret: output.webhookSecret,
@@ -892,11 +833,7 @@ const escapeHtml = (value: string) =>
 
 // A loopback page that POSTs the manifest to GitHub's registration form, and
 // the redirect target GitHub returns to with the conversion `code`.
-const manifestServer = (
-  props: AppProps,
-  registrationUrl: string,
-  state: string,
-) =>
+const manifestServer = (props: AppProps, registrationUrl: string, state: string) =>
   Effect.gen(function* () {
     const code = yield* Deferred.make<
       string,
@@ -923,9 +860,7 @@ const manifestServer = (
         res.writeHead(404).end();
         return;
       }
-      const result = Effect.runSync(
-        Effect.result(parseManifestCallback(url.href, state)),
-      );
+      const result = Effect.runSync(Effect.result(parseManifestCallback(url.href, state)));
       res.writeHead(result._tag === "Success" ? 200 : 400, {
         "Content-Type": "text/plain; charset=utf-8",
       });
@@ -936,9 +871,7 @@ const manifestServer = (
       );
       Deferred.doneUnsafe(
         code,
-        result._tag === "Success"
-          ? Effect.succeed(result.success)
-          : Effect.fail(result.failure),
+        result._tag === "Success" ? Effect.succeed(result.success) : Effect.fail(result.failure),
       );
     });
     const port = yield* Effect.acquireRelease(
@@ -963,11 +896,7 @@ const manifestServer = (
     return { url: `${origin}/`, code: Deferred.await(code) };
   });
 
-const registerApp = (
-  props: AppProps,
-  octokit: RestOctokit,
-  baseUrl: string | undefined,
-) =>
+const registerApp = (props: AppProps, octokit: RestOctokit, baseUrl: string | undefined) =>
   Effect.gen(function* () {
     const state = randomUUID();
     const registrationUrl = appRegistrationUrl({
@@ -985,9 +914,7 @@ const registerApp = (
       until: local.code,
       automate: registerAppFromManifest({ manifestUrl: local.url }),
     });
-    const { data } = yield* Effect.tryPromise(() =>
-      octokit.rest.apps.createFromManifest({ code }),
-    );
+    const { data } = yield* Effect.tryPromise(() => octokit.rest.apps.createFromManifest({ code }));
     return data;
   }).pipe(Effect.scoped);
 
@@ -1007,14 +934,10 @@ const repairAppDrift = (
 ) =>
   Effect.gen(function* () {
     const drift = appDrift(news, live);
-    const generalChanges =
-      olds === undefined ? [] : changedAppGeneralSettings(olds, news);
-    const changedVisibility =
-      olds === undefined ? [] : changedAppVisibility(olds, news);
+    const generalChanges = olds === undefined ? [] : changedAppGeneralSettings(olds, news);
+    const changedVisibility = olds === undefined ? [] : changedAppVisibility(olds, news);
     const visibility =
-      changedVisibility.length > 0
-        ? changedVisibility
-        : appVisibilityDrift(news, knownPublic);
+      changedVisibility.length > 0 ? changedVisibility : appVisibilityDrift(news, knownPublic);
     if (
       drift.length === 0 &&
       olds !== undefined &&
@@ -1025,8 +948,7 @@ const repairAppDrift = (
     }
     const slug = live.slug ?? "";
     const fields = new Set(drift.map((f) => f.field));
-    const identity =
-      fields.has("name") || fields.has("description") || fields.has("url");
+    const identity = fields.has("name") || fields.has("description") || fields.has("url");
     const desiredPublic = news.public ?? false;
     const repaired = yield* withBrowser(
       Effect.gen(function* () {
@@ -1049,10 +971,7 @@ const repairAppDrift = (
               page: "permissions",
               baseUrl,
             }),
-            permissions: appPermissionChanges(
-              news.permissions,
-              live.permissions,
-            ),
+            permissions: appPermissionChanges(news.permissions, live.permissions),
             events: news.events ?? [],
           });
         }
@@ -1073,9 +992,7 @@ const repairAppDrift = (
           baseUrl,
         );
         const app =
-          registration === undefined
-            ? undefined
-            : { ...registration, public: desiredPublic };
+          registration === undefined ? undefined : { ...registration, public: desiredPublic };
         return { app, general };
       }),
     );
@@ -1088,10 +1005,7 @@ const repairAppDrift = (
         const observed = app ?? live;
         return {
           live: observed,
-          drift: [
-            ...appDrift(news, observed),
-            ...appGeneralSettingsDrift(news, general),
-          ],
+          drift: [...appDrift(news, observed), ...appGeneralSettingsDrift(news, general)],
         };
       },
     });
@@ -1124,9 +1038,7 @@ export const AppProvider = () =>
               baseUrl,
             );
       const observed: LiveApp | undefined =
-        registration === undefined
-          ? undefined
-          : { ...registration, public: undefined };
+        registration === undefined ? undefined : { ...registration, public: undefined };
 
       // Ensure — a human registers the app from the manifest.
       const registered = observed === undefined;
@@ -1142,9 +1054,7 @@ export const AppProvider = () =>
                 clientSecret: Redacted.make(data.client_secret),
                 privateKey: Redacted.make(data.pem),
                 webhookSecret:
-                  data.webhook_secret === null
-                    ? undefined
-                    : Redacted.make(data.webhook_secret),
+                  data.webhook_secret === null ? undefined : Redacted.make(data.webhook_secret),
               }).pipe(
                 Effect.map((fresh) => ({
                   live: { ...data, public: undefined },
@@ -1183,9 +1093,7 @@ export const AppProvider = () =>
             slug,
             page: drift.every((f) => f.field === "public")
               ? "advanced"
-              : drift.every(
-                    (f) => f.field === "permissions" || f.field === "events",
-                  )
+              : drift.every((f) => f.field === "permissions" || f.field === "events")
                 ? "permissions"
                 : undefined,
             baseUrl,
@@ -1202,19 +1110,14 @@ export const AppProvider = () =>
         // The body goes in `data`: Octokit reads a top-level `url` parameter
         // as the request URL, which would send this PATCH to the webhook.
         const sync = Effect.tryPromise(() =>
-          appOctokit(live.id, secrets.privateKey, baseUrl).request(
-            "PATCH /app/hook/config",
-            {
-              data: {
-                url: webhook.url,
-                content_type: webhook.contentType ?? "json",
-                insecure_ssl: webhook.insecureSsl ? "1" : "0",
-                ...(webhook.secret === undefined
-                  ? {}
-                  : { secret: Redacted.value(webhook.secret) }),
-              },
+          appOctokit(live.id, secrets.privateKey, baseUrl).request("PATCH /app/hook/config", {
+            data: {
+              url: webhook.url,
+              content_type: webhook.contentType ?? "json",
+              insecure_ssl: webhook.insecureSsl ? "1" : "0",
+              ...(webhook.secret === undefined ? {} : { secret: Redacted.value(webhook.secret) }),
             },
-          ),
+          }),
         );
         // The one-time secrets are only stored if reconcile succeeds.
         const applied = yield* registered

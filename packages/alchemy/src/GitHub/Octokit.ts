@@ -1,18 +1,17 @@
+import { createSign } from "node:crypto";
 import { Octokit as _Octokit } from "@octokit/rest";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { createSign } from "node:crypto";
 import type { AuthError } from "../Auth/AuthProvider.ts";
 import { normalizeGitHubBaseUrl } from "./BaseUrl.ts";
 import { GitHubCredentials } from "./Credentials.ts";
 
-export const Octokit: Effect.Effect<_Octokit, never, GitHubCredentials> =
-  Effect.gen(function* () {
-    const creds = yield* yield* GitHubCredentials;
-    return creds.octokit();
-  });
+export const Octokit: Effect.Effect<_Octokit, never, GitHubCredentials> = Effect.gen(function* () {
+  const creds = yield* yield* GitHubCredentials;
+  return creds.octokit();
+});
 
 /**
  * An Octokit honoring a per-resource `baseUrl` prop. When `baseUrl` is set,
@@ -83,8 +82,7 @@ export const appOctokit = (
   baseUrl: string | undefined,
 ): _Octokit => {
   const now = Math.floor(Date.now() / 1000);
-  const encode = (value: object) =>
-    Buffer.from(JSON.stringify(value)).toString("base64url");
+  const encode = (value: object) => Buffer.from(JSON.stringify(value)).toString("base64url");
   // `iat` is backdated a minute to tolerate clock drift, as GitHub advises.
   const body = `${encode({ alg: "RS256", typ: "JWT" })}.${encode({
     iat: now - 60,
@@ -116,8 +114,7 @@ export const unlessStatus = <A>(
         }
         throw error;
       }),
-    catch: (error) =>
-      error instanceof Error ? error : new Error(String(error)),
+    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
   });
 
 const freshAppKeyMessage = "Integration must generate a public key";
@@ -130,9 +127,7 @@ const isFreshAppKey = (error: unknown): boolean =>
 
 // GitHub rejects a freshly minted app key's JWT for a few seconds after the
 // registration; the call succeeds once the key has propagated.
-export const retryFreshAppKey = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
-): Effect.Effect<A, E, R> =>
+export const retryFreshAppKey = <A, E, R>(effect: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
   Effect.retry(effect, {
     while: isFreshAppKey,
     schedule: Schedule.spaced("2 seconds"),

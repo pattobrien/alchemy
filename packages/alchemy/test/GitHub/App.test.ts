@@ -1,3 +1,10 @@
+import { generateKeyPairSync } from "node:crypto";
+import { describe, expect, it } from "alchemy-test";
+import * as Cause from "effect/Cause";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Result from "effect/Result";
 import { adopt } from "@/AdoptPolicy.ts";
 import { DestroyError } from "@/Apply.ts";
 import * as Drift from "@/Drift.ts";
@@ -10,13 +17,6 @@ import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import { State } from "@/State";
 import * as Test from "@/Test/Alchemy.ts";
 import { isUserFacing } from "@/UserFacingError.ts";
-import { describe, expect, it } from "alchemy-test";
-import { generateKeyPairSync } from "node:crypto";
-import * as Cause from "effect/Cause";
-import * as Effect from "effect/Effect";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Result from "effect/Result";
 import {
   appExists,
   appName,
@@ -39,10 +39,7 @@ import {
 } from "./app-harness.ts";
 
 const { test } = Test.make({
-  providers: Layer.mergeAll(
-    GitHub.providers({ baseUrl: "github.com" }),
-    RandomProvider(),
-  ),
+  providers: Layer.mergeAll(GitHub.providers({ baseUrl: "github.com" }), RandomProvider()),
 });
 
 const apiTags = ["provider:github", "provider:github:app", "live"] as const;
@@ -56,10 +53,7 @@ const browserTest = {
   timeout: 300_000,
 };
 
-const appProps = (
-  id: string,
-  overrides: Partial<GitHub.AppProps> = {},
-): GitHub.AppProps => ({
+const appProps = (id: string, overrides: Partial<GitHub.AppProps> = {}): GitHub.AppProps => ({
   owner,
   name: appName(id),
   url: "https://alchemy.run",
@@ -258,16 +252,13 @@ describe(
 
     it("ignores the setup URL under OAuth on install and Active without a webhook", () => {
       expect(
-        GitHub.appGeneralSettingsDrift(
-          appProps("unit", { requestOauthOnInstall: true }),
-          {
-            callbackUrls: [],
-            requestOauthOnInstall: true,
-            setupUrl: "https://example.com/setup",
-            setupOnUpdate: false,
-            webhookActive: false,
-          },
-        ),
+        GitHub.appGeneralSettingsDrift(appProps("unit", { requestOauthOnInstall: true }), {
+          callbackUrls: [],
+          requestOauthOnInstall: true,
+          setupUrl: "https://example.com/setup",
+          setupOnUpdate: false,
+          webhookActive: false,
+        }),
       ).toEqual([]);
     });
 
@@ -304,9 +295,7 @@ describe(
         _tag: "GitHubAppDuplicateCallbackUrls",
         message: expect.stringContaining("https://example.com/a"),
       });
-      expect(
-        Result.isFailure(duplicated) && isUserFacing(duplicated.failure),
-      ).toBe(true);
+      expect(Result.isFailure(duplicated) && isUserFacing(duplicated.failure)).toBe(true);
     });
 
     it("rejects props GitHub would refuse with typed errors", () => {
@@ -324,18 +313,13 @@ describe(
         _tag: "GitHubAppSetupUrlRequiresNoOauth",
         message: expect.stringContaining("setupUrl"),
       });
-      expect(Result.isFailure(conflict) && isUserFacing(conflict.failure)).toBe(
-        true,
-      );
+      expect(Result.isFailure(conflict) && isUserFacing(conflict.failure)).toBe(true);
 
       const tooMany = Effect.runSync(
         Effect.result(
           GitHub.validateAppProps(
             appProps("unit", {
-              callbackUrls: Array.from(
-                { length: 11 },
-                (_, i) => `https://example.com/${i}`,
-              ),
+              callbackUrls: Array.from({ length: 11 }, (_, i) => `https://example.com/${i}`),
             }),
           ),
         ),
@@ -348,10 +332,7 @@ describe(
         Effect.result(
           GitHub.validateAppProps(
             appProps("unit", {
-              callbackUrls: Array.from(
-                { length: 10 },
-                (_, i) => `https://example.com/${i}`,
-              ),
+              callbackUrls: Array.from({ length: 10 }, (_, i) => `https://example.com/${i}`),
               setupUrl: "https://example.com/setup",
             }),
           ),
@@ -362,10 +343,9 @@ describe(
 
     it("registers the app public only when asked", () => {
       const redirectUrl = "http://127.0.0.1:4321/callback";
-      expect(
-        GitHub.appManifest(appProps("unit", { public: true }), { redirectUrl })
-          .public,
-      ).toBe(true);
+      expect(GitHub.appManifest(appProps("unit", { public: true }), { redirectUrl }).public).toBe(
+        true,
+      );
       expect(
         GitHub.appManifest(appProps("unit", { public: false }), {
           redirectUrl,
@@ -377,20 +357,15 @@ describe(
       expect(GitHub.appVisibilityDrift(appProps("unit"), true)).toEqual([
         { field: "public", desired: false, live: true },
       ]);
-      expect(
-        GitHub.appVisibilityDrift(appProps("unit", { public: true }), true),
-      ).toEqual([]);
-      expect(
-        GitHub.appVisibilityDrift(appProps("unit", { public: true }), false),
-      ).toEqual([{ field: "public", desired: true, live: false }]);
+      expect(GitHub.appVisibilityDrift(appProps("unit", { public: true }), true)).toEqual([]);
+      expect(GitHub.appVisibilityDrift(appProps("unit", { public: true }), false)).toEqual([
+        { field: "public", desired: true, live: false },
+      ]);
     });
 
     it("reports a changed public prop with the live visibility unknown", () => {
       expect(
-        GitHub.changedAppVisibility(
-          appProps("unit"),
-          appProps("unit", { public: true }),
-        ),
+        GitHub.changedAppVisibility(appProps("unit"), appProps("unit", { public: true })),
       ).toEqual([{ field: "public", desired: true, live: undefined }]);
       expect(
         GitHub.changedAppVisibility(
@@ -399,10 +374,7 @@ describe(
         ),
       ).toEqual([{ field: "public", desired: false, live: undefined }]);
       expect(
-        GitHub.changedAppVisibility(
-          appProps("unit", { public: false }),
-          appProps("unit"),
-        ),
+        GitHub.changedAppVisibility(appProps("unit", { public: false }), appProps("unit")),
       ).toEqual([]);
     });
 
@@ -421,15 +393,11 @@ describe(
     it("derives the slug from the name unless one is given", () => {
       expect(GitHub.appSlug({ name: "My Org Bot" })).toBe("my-org-bot");
       expect(GitHub.appSlug({ name: " shed_build! " })).toBe("shed-build");
-      expect(GitHub.appSlug({ name: "Renamed", slug: "shed-build" })).toBe(
-        "shed-build",
-      );
+      expect(GitHub.appSlug({ name: "Renamed", slug: "shed-build" })).toBe("shed-build");
     });
 
     it("builds registration and settings URLs for orgs and users", () => {
-      expect(
-        GitHub.appRegistrationUrl({ owner: "FD-Test-Org", state: "abc" }),
-      ).toBe(
+      expect(GitHub.appRegistrationUrl({ owner: "FD-Test-Org", state: "abc" })).toBe(
         "https://github.com/organizations/FD-Test-Org/settings/apps/new?state=abc",
       );
       expect(GitHub.appRegistrationUrl({ state: "abc" })).toBe(
@@ -441,12 +409,8 @@ describe(
           state: "abc",
           baseUrl: "github.example.com",
         }),
-      ).toBe(
-        "https://github.example.com/organizations/acme/settings/apps/new?state=abc",
-      );
-      expect(
-        GitHub.appSettingsUrl({ owner: "FD-Test-Org", slug: "my-app" }),
-      ).toBe(
+      ).toBe("https://github.example.com/organizations/acme/settings/apps/new?state=abc");
+      expect(GitHub.appSettingsUrl({ owner: "FD-Test-Org", slug: "my-app" })).toBe(
         "https://github.com/organizations/FD-Test-Org/settings/apps/my-app",
       );
       expect(
@@ -455,12 +419,10 @@ describe(
           slug: "my-app",
           page: "advanced",
         }),
-      ).toBe(
-        "https://github.com/organizations/FD-Test-Org/settings/apps/my-app/advanced",
+      ).toBe("https://github.com/organizations/FD-Test-Org/settings/apps/my-app/advanced");
+      expect(GitHub.appSettingsUrl({ slug: "my-app", page: "permissions" })).toBe(
+        "https://github.com/settings/apps/my-app/permissions",
       );
-      expect(
-        GitHub.appSettingsUrl({ slug: "my-app", page: "permissions" }),
-      ).toBe("https://github.com/settings/apps/my-app/permissions");
     });
 
     it("accepts the manifest callback only with the expected state", () => {
@@ -488,10 +450,7 @@ describe(
 
       const missing = Effect.runSync(
         Effect.result(
-          GitHub.parseManifestCallback(
-            "http://127.0.0.1:4321/callback?state=expected",
-            "expected",
-          ),
+          GitHub.parseManifestCallback("http://127.0.0.1:4321/callback?state=expected", "expected"),
         ),
       );
       expect(Result.isFailure(missing)).toBe(true);
@@ -576,9 +535,7 @@ describe(
         GitHub.appPrivateKeyPkcs8("my-app", Redacted.make(rsaKey.pkcs1)),
       );
       expect(Redacted.isRedacted(converted)).toBe(true);
-      expect(
-        Redacted.value(converted).startsWith("-----BEGIN PRIVATE KEY-----"),
-      ).toBe(true);
+      expect(Redacted.value(converted).startsWith("-----BEGIN PRIVATE KEY-----")).toBe(true);
       expect(Redacted.value(converted)).toBe(rsaKey.pkcs8);
     });
 
@@ -606,9 +563,7 @@ describe(
         slug: "my-app",
         message: expect.stringContaining("GitHub App my-app"),
       });
-      expect(
-        Result.isFailure(malformed) && isUserFacing(malformed.failure),
-      ).toBe(true);
+      expect(Result.isFailure(malformed) && isUserFacing(malformed.failure)).toBe(true);
     });
   },
 );
@@ -620,15 +575,11 @@ test.provider(
       const props = appProps("noterm");
       yield* stack.destroy();
 
-      const error = failureOf(
-        yield* Effect.exit(stack.deploy(deployApp(props))),
-      );
+      const error = failureOf(yield* Effect.exit(stack.deploy(deployApp(props))));
       expect(error).toMatchObject({
         _tag: "GitHubManualStepRequired",
         step: "register-app",
-        url: expect.stringContaining(
-          `https://github.com/organizations/${owner}/settings/apps/new`,
-        ),
+        url: expect.stringContaining(`https://github.com/organizations/${owner}/settings/apps/new`),
         message: expect.stringContaining(
           `GitHub has no API to create GitHub App ${props.name}. Run deploy in an interactive terminal`,
         ),
@@ -650,9 +601,7 @@ test.provider(
       const human = autopilot({ idle: true });
       const error = failureOf(
         yield* Effect.exit(
-          human.run(
-            stack.deploy(deployApp(appProps("nohook", { events: ["issues"] }))),
-          ),
+          human.run(stack.deploy(deployApp(appProps("nohook", { events: ["issues"] })))),
         ),
       );
       expect(error).toMatchObject({ _tag: "GitHubAppEventsRequireWebhook" });
@@ -674,9 +623,7 @@ test.provider(
       const human = autopilot({ idle: true });
       const error = failureOf(
         yield* Effect.exit(
-          human
-            .run(stack.deploy(deployApp(props)))
-            .pipe(withManualStepTimeout("5 seconds")),
+          human.run(stack.deploy(deployApp(props))).pipe(withManualStepTimeout("5 seconds")),
         ),
       );
       expect(error).toMatchObject({
@@ -685,9 +632,7 @@ test.provider(
       });
       expect(isUserFacing(error)).toBe(true);
       expect(human.launched).toHaveLength(1);
-      expect(new URL(human.launched[0]!).hostname).toMatch(
-        /^(127\.0\.0\.1|localhost)$/,
-      );
+      expect(new URL(human.launched[0]!).hostname).toMatch(/^(127\.0\.0\.1|localhost)$/);
       expect(human.prompts).toHaveLength(1);
       expect(yield* appExists(yield* Octokit, props.name)).toBe(false);
       yield* expectNoAppPersisted(stack);
@@ -725,11 +670,9 @@ test.provider(
       expect(live?.id).toBe(app.appId);
       expect(live?.slug).toBe(app.slug);
 
-      expect(
-        Redacted.value(app.privateKeyPkcs8).startsWith(
-          "-----BEGIN PRIVATE KEY-----",
-        ),
-      ).toBe(true);
+      expect(Redacted.value(app.privateKeyPkcs8).startsWith("-----BEGIN PRIVATE KEY-----")).toBe(
+        true,
+      );
       expect(app.botLogin).toBe(`${app.slug}[bot]`);
       const octokit = yield* Octokit;
       const { data: bot } = yield* Effect.tryPromise(() =>
@@ -750,17 +693,13 @@ test.provider(
       expect(quiet.prompts).toEqual([]);
 
       const remover = autopilot();
-      yield* remover
-        .run(stack.destroy())
-        .pipe(withManualStepTimeout("2 minutes"));
+      yield* remover.run(stack.destroy()).pipe(withManualStepTimeout("2 minutes"));
       expect(remover.launched).toEqual([
         `https://github.com/organizations/${owner}/settings/apps/${props.name}/advanced`,
       ]);
       expect(yield* appExists(yield* Octokit, props.name)).toBe(false);
       expect(yield* persistedApp(stack)).toBeUndefined();
-    }).pipe(
-      Effect.ensuring(cleanup(stack, appName("lifecycle")).pipe(Effect.ignore)),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("lifecycle")).pipe(Effect.ignore))),
   browserTest,
 );
 
@@ -812,24 +751,15 @@ test.provider(
       expect(updated.app.appId).toBe(app.appId);
       expect(human.launched).toEqual([]);
       expect(human.prompts).toEqual([]);
-      expect(Redacted.value(updated.app.webhookSecret!)).toBe(
-        Redacted.value(updated.secret.text),
-      );
+      expect(Redacted.value(updated.app.webhookSecret!)).toBe(Redacted.value(updated.secret.text));
 
       const { data: config } = yield* Effect.tryPromise(() =>
-        appOctokit(
-          app.appId,
-          app.privateKey,
-        ).rest.apps.getWebhookConfigForApp(),
+        appOctokit(app.appId, app.privateKey).rest.apps.getWebhookConfigForApp(),
       );
-      expect(config.url).toBe(
-        `https://github.com/${owner}/${fixtureRepos[0]}/hook`,
-      );
+      expect(config.url).toBe(`https://github.com/${owner}/${fixtureRepos[0]}/hook`);
       expect(config.content_type).toBe("form");
       expect(config.secret).toBe("********");
-    }).pipe(
-      Effect.ensuring(cleanup(stack, appName("webhook")).pipe(Effect.ignore)),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("webhook")).pipe(Effect.ignore))),
   browserTest,
 );
 
@@ -850,11 +780,7 @@ test.provider(
       const human = autopilot({ idle: true });
       const error = failureOf(
         yield* Effect.exit(
-          human.run(
-            stack.deploy(
-              deployApp(appProps(id, { permissions: { issues: "write" } })),
-            ),
-          ),
+          human.run(stack.deploy(deployApp(appProps(id, { permissions: { issues: "write" } })))),
         ),
       );
       const settingsUrl = `https://github.com/organizations/${owner}/settings/apps/${app.slug}/permissions`;
@@ -885,15 +811,11 @@ test.provider(
       expect(detected.resources["App"]?.action).toBe("skipped");
 
       const fixed = yield* autopilot().run(
-        stack.deploy(
-          deployApp(appProps(id, { permissions: { issues: "write" } })),
-        ),
+        stack.deploy(deployApp(appProps(id, { permissions: { issues: "write" } }))),
       );
       expect(fixed.appId).toBe(app.appId);
       expect(fixed.permissions).toMatchObject({ issues: "write" });
-    }).pipe(
-      Effect.ensuring(cleanup(stack, appName("drift")).pipe(Effect.ignore)),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("drift")).pipe(Effect.ignore))),
   browserTest,
 );
 
@@ -919,9 +841,7 @@ test.provider(
       expect(detected.resources["App"]?.action).toBe("drifted");
 
       const human = autopilot({ idle: true });
-      const repair = failureOf(
-        yield* Effect.exit(human.run(Drift.repair(identity(stack)))),
-      );
+      const repair = failureOf(yield* Effect.exit(human.run(Drift.repair(identity(stack)))));
       const settingsUrl = `https://github.com/organizations/${owner}/settings/apps/${app.slug}/permissions`;
       expect(repair).toMatchObject({
         _tag: "DriftResourceError",
@@ -947,9 +867,7 @@ test.provider(
       });
       const reverted = yield* Drift.detect(identity(stack));
       expect(reverted.resources["App"]?.action).toBe("unchanged");
-    }).pipe(
-      Effect.ensuring(cleanup(stack, appName("oobperm")).pipe(Effect.ignore)),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("oobperm")).pipe(Effect.ignore))),
   browserTest,
 );
 
@@ -968,26 +886,18 @@ test.provider(
       expect(yield* appExists(yield* Octokit, props.name)).toBe(true);
       expect(human.prompts).toEqual([]);
 
-      const again = yield* human.run(
-        unattended(stack.deploy(deployApp(props))),
-      );
+      const again = yield* human.run(unattended(stack.deploy(deployApp(props))));
       expect(again.appId).toBe(app.appId);
       expect(human.prompts).toEqual([]);
 
-      yield* human
-        .run(unattended(stack.destroy()))
-        .pipe(withManualStepTimeout("2 minutes"));
+      yield* human.run(unattended(stack.destroy())).pipe(withManualStepTimeout("2 minutes"));
       expect(human.prompts).toEqual([]);
       expect(human.launched).toContain(
         `https://github.com/organizations/${owner}/settings/apps/${props.name}/advanced`,
       );
       expect(yield* appExists(yield* Octokit, props.name)).toBe(false);
       expect(yield* persistedApp(stack)).toBeUndefined();
-    }).pipe(
-      Effect.ensuring(
-        cleanup(stack, appName("unattended")).pipe(Effect.ignore),
-      ),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("unattended")).pipe(Effect.ignore))),
   { ...browserTest, timeout: 240_000 },
 );
 
@@ -1031,9 +941,7 @@ test.provider(
 
       const detected = yield* Drift.detect(identity(stack));
       expect(detected.resources["App"]?.action).toBe("unchanged");
-    }).pipe(
-      Effect.ensuring(cleanup(stack, appName("repair")).pipe(Effect.ignore)),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("repair")).pipe(Effect.ignore))),
   { ...browserTest, timeout: 240_000 },
 );
 
@@ -1045,35 +953,25 @@ test.provider(
       yield* cleanup(stack, appName(id));
 
       const app = yield* autopilot()
-        .run(
-          unattended(stack.deploy(deployApp(appProps(id, { public: true })))),
-        )
+        .run(unattended(stack.deploy(deployApp(appProps(id, { public: true })))))
         .pipe(withManualStepTimeout("2 minutes"));
       expect(app.public).toBe(true);
       expect(yield* readAppVisibilityInUi(app.slug)).toBe(true);
 
       const human = autopilot();
       const made = yield* human
-        .run(
-          unattended(stack.deploy(deployApp(appProps(id, { public: false })))),
-        )
+        .run(unattended(stack.deploy(deployApp(appProps(id, { public: false })))))
         .pipe(withManualStepTimeout("2 minutes"));
       expect(made.appId).toBe(app.appId);
       expect(made.public).toBe(false);
       expect(human.prompts).toEqual([]);
-      expect(human.launched).toContain(
-        `${orgSettings(owner)}/apps/${app.slug}/advanced`,
-      );
+      expect(human.launched).toContain(`${orgSettings(owner)}/apps/${app.slug}/advanced`);
       expect(yield* readAppVisibilityInUi(app.slug)).toBe(false);
 
-      yield* autopilot()
-        .run(unattended(stack.destroy()))
-        .pipe(withManualStepTimeout("2 minutes"));
+      yield* autopilot().run(unattended(stack.destroy())).pipe(withManualStepTimeout("2 minutes"));
       expect(yield* appExists(yield* Octokit, app.slug)).toBe(false);
       expect(yield* persistedApp(stack)).toBeUndefined();
-    }).pipe(
-      Effect.ensuring(cleanup(stack, appName("public")).pipe(Effect.ignore)),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("public")).pipe(Effect.ignore))),
   browserTest,
 );
 
@@ -1115,9 +1013,7 @@ test.provider(
       expect(attrs.appId).toBe(app.appId);
       expect(attrs.public).toBe(false);
       expect(human.prompts).toEqual([]);
-      expect(human.launched).toContain(
-        `${orgSettings(owner)}/apps/${app.slug}/advanced`,
-      );
+      expect(human.launched).toContain(`${orgSettings(owner)}/apps/${app.slug}/advanced`);
 
       expect(yield* readAppVisibilityInUi(app.slug)).toBe(false);
       const { data: live } = yield* Effect.tryPromise(() =>
@@ -1128,14 +1024,10 @@ test.provider(
       const after = yield* autopilot().run(Drift.detect(identity(stack)));
       expect(after.resources["App"]?.action).toBe("unchanged");
 
-      yield* autopilot()
-        .run(unattended(stack.destroy()))
-        .pipe(withManualStepTimeout("2 minutes"));
+      yield* autopilot().run(unattended(stack.destroy())).pipe(withManualStepTimeout("2 minutes"));
       expect(yield* appExists(yield* Octokit, app.slug)).toBe(false);
       expect(yield* persistedApp(stack)).toBeUndefined();
-    }).pipe(
-      Effect.ensuring(cleanup(stack, appName("oobpublic")).pipe(Effect.ignore)),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("oobpublic")).pipe(Effect.ignore))),
   browserTest,
 );
 
@@ -1237,14 +1129,10 @@ test.provider(
         webhookActive: true,
       });
 
-      yield* autopilot()
-        .run(unattended(stack.destroy()))
-        .pipe(withManualStepTimeout("2 minutes"));
+      yield* autopilot().run(unattended(stack.destroy())).pipe(withManualStepTimeout("2 minutes"));
       expect(yield* appExists(yield* Octokit, app.slug)).toBe(false);
       expect(yield* persistedApp(stack)).toBeUndefined();
-    }).pipe(
-      Effect.ensuring(cleanup(stack, appName("general")).pipe(Effect.ignore)),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("general")).pipe(Effect.ignore))),
   browserTest,
 );
 
@@ -1275,9 +1163,7 @@ test.provider(
         callbackUrls: ["https://example.com/callback-b"],
       });
       const human = autopilot({ idle: true });
-      const error = failureOf(
-        yield* Effect.exit(human.run(stack.deploy(deployApp(changed)))),
-      );
+      const error = failureOf(yield* Effect.exit(human.run(stack.deploy(deployApp(changed)))));
       const settingsUrl = `${orgSettings(owner)}/apps/${app.slug}`;
       expect(error).toMatchObject({
         _tag: "GitHubAppDrift",
@@ -1308,16 +1194,10 @@ test.provider(
         setupOnUpdate: false,
       });
 
-      yield* autopilot()
-        .run(unattended(stack.destroy()))
-        .pipe(withManualStepTimeout("2 minutes"));
+      yield* autopilot().run(unattended(stack.destroy())).pipe(withManualStepTimeout("2 minutes"));
       expect(yield* appExists(yield* Octokit, app.slug)).toBe(false);
       expect(yield* persistedApp(stack)).toBeUndefined();
-    }).pipe(
-      Effect.ensuring(
-        cleanup(stack, appName("generaldrift")).pipe(Effect.ignore),
-      ),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("generaldrift")).pipe(Effect.ignore))),
   browserTest,
 );
 
@@ -1333,9 +1213,7 @@ test.provider(
         .pipe(withManualStepTimeout("2 minutes"));
       const advancedUrl = `https://github.com/organizations/${owner}/settings/apps/${app.slug}/advanced`;
 
-      const noTerminal = destroyFailures(
-        failureOf(yield* Effect.exit(stack.destroy())),
-      );
+      const noTerminal = destroyFailures(failureOf(yield* Effect.exit(stack.destroy())));
       expect(noTerminal?.message).toEqual(expect.stringContaining(advancedUrl));
       expect(noTerminal?.causes).toMatchObject([
         {
@@ -1352,9 +1230,7 @@ test.provider(
       const idle = autopilot({ idle: true });
       const timedOut = destroyFailures(
         failureOf(
-          yield* Effect.exit(
-            idle.run(stack.destroy()).pipe(withManualStepTimeout("5 seconds")),
-          ),
+          yield* Effect.exit(idle.run(stack.destroy()).pipe(withManualStepTimeout("5 seconds"))),
         ),
       );
       expect(timedOut?.message).toEqual(expect.stringContaining(advancedUrl));
@@ -1370,13 +1246,9 @@ test.provider(
       expect(yield* appExists(yield* Octokit, app.slug)).toBe(true);
       expect(yield* persistedApp(stack)).toBeDefined();
 
-      yield* autopilot()
-        .run(stack.destroy())
-        .pipe(withManualStepTimeout("2 minutes"));
+      yield* autopilot().run(stack.destroy()).pipe(withManualStepTimeout("2 minutes"));
       expect(yield* appExists(yield* Octokit, app.slug)).toBe(false);
-    }).pipe(
-      Effect.ensuring(cleanup(stack, appName("keepstate")).pipe(Effect.ignore)),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("keepstate")).pipe(Effect.ignore))),
   browserTest,
 );
 
@@ -1398,9 +1270,7 @@ test.provider(
       const detected = yield* Drift.detect(identity(stack));
       expect(detected.resources["App"]?.action).toBe("missing");
 
-      const noTerminal = failureOf(
-        yield* Effect.exit(Drift.repair(identity(stack))),
-      );
+      const noTerminal = failureOf(yield* Effect.exit(Drift.repair(identity(stack))));
       expect(noTerminal).toMatchObject({
         _tag: "DriftResourceError",
         cause: { _tag: "GitHubManualStepRequired", step: "register-app" },
@@ -1411,21 +1281,15 @@ test.provider(
         .run(Drift.repair(identity(stack)))
         .pipe(withManualStepTimeout("2 minutes"));
       expect(repaired.resources["App"]?.action).toBe("recreated");
-      const recreated: GitHub.App["Attributes"] =
-        repaired.resources["App"]?.attr;
+      const recreated: GitHub.App["Attributes"] = repaired.resources["App"]?.attr;
       expect(recreated.appId).not.toBe(app.appId);
       expect(recreated.slug).toBe(props.name);
       expectManifestPagesOnly(human.launched);
       const { data: live } = yield* Effect.tryPromise(() =>
-        appOctokit(
-          recreated.appId,
-          recreated.privateKey,
-        ).rest.apps.getAuthenticated(),
+        appOctokit(recreated.appId, recreated.privateKey).rest.apps.getAuthenticated(),
       );
       expect(live?.id).toBe(recreated.appId);
-    }).pipe(
-      Effect.ensuring(cleanup(stack, appName("oob")).pipe(Effect.ignore)),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("oob")).pipe(Effect.ignore))),
   browserTest,
 );
 
@@ -1448,9 +1312,7 @@ test.provider(
       // Found by slug with no state, the registration is someone else's and
       // adopting it needs the key...
       const settingsUrl = `https://github.com/organizations/${owner}/settings/apps/${props.name}`;
-      const keyless = failureOf(
-        yield* Effect.exit(stack.deploy(deployApp(props))),
-      );
+      const keyless = failureOf(yield* Effect.exit(stack.deploy(deployApp(props))));
       expect(keyless).toMatchObject({
         _tag: "GitHubAppAdoptionNeedsKey",
         url: settingsUrl,
@@ -1479,15 +1341,11 @@ test.provider(
       // ...until --adopt takes it over, without a prompt. The browser reads
       // the visibility, then syncs the settings no API reads.
       const quiet = autopilot();
-      const adopted = yield* quiet.run(
-        stack.deploy(deployApp(withKey).pipe(adopt(true))),
-      );
+      const adopted = yield* quiet.run(stack.deploy(deployApp(withKey).pipe(adopt(true))));
       expect(adopted.appId).toBe(app.appId);
       expect(adopted.slug).toBe(props.name);
       expect(adopted.clientSecret).toBeUndefined();
-      expect(Redacted.value(adopted.privateKey)).toBe(
-        Redacted.value(app.privateKey),
-      );
+      expect(Redacted.value(adopted.privateKey)).toBe(Redacted.value(app.privateKey));
       expect(adopted.public).toBe(false);
       expect(quiet.launched).toEqual([
         `${settingsUrl}/advanced`,
@@ -1498,14 +1356,10 @@ test.provider(
 
       // Opted into destroy(): the browser delete step runs.
       const remover = autopilot();
-      yield* remover
-        .run(stack.destroy())
-        .pipe(withManualStepTimeout("2 minutes"));
+      yield* remover.run(stack.destroy()).pipe(withManualStepTimeout("2 minutes"));
       expect(remover.launched).toEqual([`${settingsUrl}/advanced`]);
       expect(yield* appExists(yield* Octokit, props.name)).toBe(false);
-    }).pipe(
-      Effect.ensuring(cleanup(stack, appName("adopt")).pipe(Effect.ignore)),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("adopt")).pipe(Effect.ignore))),
   browserTest,
 );
 
@@ -1534,23 +1388,13 @@ test.provider(
       expect(app.htmlUrl).toBe(`https://github.com/apps/${props.name}`);
 
       const remover = autopilot();
-      yield* remover
-        .run(stack.destroy())
-        .pipe(withManualStepTimeout("2 minutes"));
-      expect(remover.launched).toEqual([
-        `https://github.com/settings/apps/${props.name}/advanced`,
-      ]);
+      yield* remover.run(stack.destroy()).pipe(withManualStepTimeout("2 minutes"));
+      expect(remover.launched).toEqual([`https://github.com/settings/apps/${props.name}/advanced`]);
       const gone = yield* Effect.exit(
-        Effect.tryPromise(() =>
-          appOctokit(app.appId, app.privateKey).rest.apps.getAuthenticated(),
-        ),
+        Effect.tryPromise(() => appOctokit(app.appId, app.privateKey).rest.apps.getAuthenticated()),
       );
       expect(gone._tag).toBe("Failure");
-    }).pipe(
-      Effect.ensuring(
-        cleanupUserApp(stack, appName("user")).pipe(Effect.ignore),
-      ),
-    ),
+    }).pipe(Effect.ensuring(cleanupUserApp(stack, appName("user")).pipe(Effect.ignore))),
   browserTest,
 );
 

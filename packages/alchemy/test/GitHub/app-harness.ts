@@ -1,3 +1,14 @@
+import * as os from "node:os";
+import * as path from "node:path";
+import * as NodeServices from "@effect/platform-node/NodeServices";
+import { Octokit as RestOctokit } from "@octokit/rest";
+import * as Cause from "effect/Cause";
+import type * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as Exit from "effect/Exit";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import * as Scope from "effect/Scope";
 // Shared harness for the GitHub App / AppInstallation live tests.
 //
 // GitHub has no API to register, install, delete or re-permission an app, so
@@ -18,25 +29,12 @@
 import * as GitHub from "@/GitHub/index.ts";
 import * as Octokit from "@/GitHub/Octokit.ts";
 import * as Interaction from "@/Interaction.ts";
-import * as NodeServices from "@effect/platform-node/NodeServices";
-import { Octokit as RestOctokit } from "@octokit/rest";
-import * as Cause from "effect/Cause";
-import type * as Duration from "effect/Duration";
-import * as Effect from "effect/Effect";
-import * as Exit from "effect/Exit";
-import * as Layer from "effect/Layer";
-import * as Redacted from "effect/Redacted";
-import * as Scope from "effect/Scope";
-import * as os from "node:os";
-import * as path from "node:path";
 
 export type { GitHubBrowserError } from "@/GitHub/Browser.ts";
 
 export const owner = process.env.GITHUB_APP_TEST_OWNER ?? "FD-Test-Org";
 if (!/test/i.test(owner)) {
-  throw new Error(
-    `GITHUB_APP_TEST_OWNER must name a dedicated test org, got ${owner}`,
-  );
+  throw new Error(`GITHUB_APP_TEST_OWNER must name a dedicated test org, got ${owner}`);
 }
 
 // App names are global across GitHub and capped at 34 characters.
@@ -47,10 +45,7 @@ export const appName = (id: string) => {
   return name;
 };
 
-export const fixtureRepos = [
-  "alchemy-app-fixture-a",
-  "alchemy-app-fixture-b",
-] as const;
+export const fixtureRepos = ["alchemy-app-fixture-a", "alchemy-app-fixture-b"] as const;
 
 export const profileDir =
   process.env.GITHUB_APP_TEST_BROWSER_PROFILE ??
@@ -61,10 +56,8 @@ export const profileDir =
 export const failureOf = (exit: Exit.Exit<unknown, unknown>) =>
   Exit.isFailure(exit) ? Cause.squash(exit.cause) : undefined;
 
-export const appOctokit = (
-  appId: number,
-  privateKey: Redacted.Redacted<string>,
-): RestOctokit => Octokit.appOctokit(appId, privateKey, undefined);
+export const appOctokit = (appId: number, privateKey: Redacted.Redacted<string>): RestOctokit =>
+  Octokit.appOctokit(appId, privateKey, undefined);
 
 export const installationOctokit = (
   appId: number,
@@ -72,10 +65,7 @@ export const installationOctokit = (
   installationId: number,
 ): Effect.Effect<RestOctokit, Cause.UnknownError> =>
   Effect.tryPromise(async () => {
-    const { data } = await appOctokit(
-      appId,
-      privateKey,
-    ).rest.apps.createInstallationAccessToken({
+    const { data } = await appOctokit(appId, privateKey).rest.apps.createInstallationAccessToken({
       installation_id: installationId,
     });
     return new RestOctokit({ auth: data.token });
@@ -106,17 +96,13 @@ const sharedBrowser = Effect.runSync(
   ),
 );
 
-export const browserLayer: Layer.Layer<GitHub.GitHubBrowser> =
-  Layer.effectContext(sharedBrowser);
+export const browserLayer: Layer.Layer<GitHub.GitHubBrowser> = Layer.effectContext(sharedBrowser);
 
-export const orgSettings = (org: string) =>
-  `https://github.com/organizations/${org}/settings`;
+export const orgSettings = (org: string) => `https://github.com/organizations/${org}/settings`;
 
 /** UI step an installation owner takes after the app raised permissions. */
 export const acceptPermissionsInUi = (reviewUrl: string) =>
-  GitHub.WebFlows.acceptInstallationPermissions({ reviewUrl }).pipe(
-    Effect.provide(browserLayer),
-  );
+  GitHub.WebFlows.acceptInstallationPermissions({ reviewUrl }).pipe(Effect.provide(browserLayer));
 
 /** UI step an installation owner takes: suspend the app on the account. */
 export const suspendInstallationInUi = (settingsUrl: string) =>
@@ -125,8 +111,7 @@ export const suspendInstallationInUi = (settingsUrl: string) =>
     suspended: true,
   }).pipe(Effect.provide(browserLayer));
 
-const appAdvancedSettingsInUi = (slug: string) =>
-  `${orgSettings(owner)}/apps/${slug}/advanced`;
+const appAdvancedSettingsInUi = (slug: string) => `${orgSettings(owner)}/apps/${slug}/advanced`;
 
 /** UI change a human would make: make the app public or private. */
 export const setAppVisibilityInUi = (slug: string, visible: boolean) =>
@@ -193,9 +178,7 @@ export const listTestAppsInUi = GitHub.GitHubBrowser.use((browser) =>
       .evaluateAll((links) => links.map((a) => a.getAttribute("href") ?? ""));
     return [
       ...new Set(
-        hrefs
-          .map((href) => href.split("/")[5] ?? "")
-          .filter((slug) => slug.startsWith(appPrefix)),
+        hrefs.map((href) => href.split("/")[5] ?? "").filter((slug) => slug.startsWith(appPrefix)),
       ),
     ];
   }),
@@ -247,11 +230,7 @@ export interface Autopilot {
    */
   readonly run: <A, E, R>(
     effect: Effect.Effect<A, E, R>,
-  ) => Effect.Effect<
-    A,
-    E | GitHub.GitHubBrowserError,
-    R | Interaction.Interaction
-  >;
+  ) => Effect.Effect<A, E | GitHub.GitHubBrowserError, R | Interaction.Interaction>;
 }
 
 const recordingBrowser = (launched: string[]) =>

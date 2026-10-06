@@ -1,9 +1,9 @@
+import * as crypto from "node:crypto";
 import * as Clock from "effect/Clock";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
 import * as Semaphore from "effect/Semaphore";
-import * as crypto from "node:crypto";
 
 const BASE32_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 
@@ -78,9 +78,7 @@ export const nextUnusedCode = (
       let now = yield* Clock.currentTimeMillis;
       let step = Math.floor(now / 1000 / period);
       while (step <= lastStep) {
-        yield* Effect.sleep(
-          Duration.millis((lastStep + 1) * period * 1000 - now),
-        );
+        yield* Effect.sleep(Duration.millis((lastStep + 1) * period * 1000 - now));
         now = yield* Clock.currentTimeMillis;
         step = Math.floor(now / 1000 / period);
       }

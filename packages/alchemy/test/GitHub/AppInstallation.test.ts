@@ -1,3 +1,7 @@
+import { describe, expect, it } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
+import * as Schedule from "effect/Schedule";
 import { adopt } from "@/AdoptPolicy.ts";
 import * as GitHub from "@/GitHub/index.ts";
 import { Octokit } from "@/GitHub/Octokit.ts";
@@ -5,10 +9,6 @@ import * as Interaction from "@/Interaction.ts";
 import * as RemovalPolicy from "@/RemovalPolicy.ts";
 import * as Test from "@/Test/Alchemy.ts";
 import { isUserFacing } from "@/UserFacingError.ts";
-import { describe, expect, it } from "alchemy-test";
-import * as Effect from "effect/Effect";
-import type * as Redacted from "effect/Redacted";
-import * as Schedule from "effect/Schedule";
 import {
   acceptPermissionsInUi,
   appName,
@@ -52,10 +52,7 @@ const program = (
   id: string,
   options: {
     readonly permissions?: GitHub.AppProps["permissions"];
-    readonly installation?: Omit<
-      GitHub.AppInstallationProps,
-      "appId" | "privateKey"
-    >;
+    readonly installation?: Omit<GitHub.AppInstallationProps, "appId" | "privateKey">;
     /** Take over an installation that has no state (`--adopt`). */
     readonly adopt?: boolean;
     /** Uninstall when the resource is removed; the default retains. */
@@ -76,10 +73,7 @@ const program = (
             appId: app.appId,
             privateKey: app.privateKey,
             ...options.installation,
-          }).pipe(
-            adopt(options.adopt ?? false),
-            RemovalPolicy.destroy(options.destroy ?? false),
-          );
+          }).pipe(adopt(options.adopt ?? false), RemovalPolicy.destroy(options.destroy ?? false));
     return { app, installation };
   });
 
@@ -95,11 +89,7 @@ const installedRepos = (
   installationId: number,
 ) =>
   Effect.gen(function* () {
-    const octokit = yield* installationOctokit(
-      appId,
-      privateKey,
-      installationId,
-    );
+    const octokit = yield* installationOctokit(appId, privateKey, installationId);
     const repos = yield* Effect.tryPromise(() =>
       octokit.paginate(octokit.rest.apps.listReposAccessibleToInstallation, {
         per_page: 100,
@@ -128,12 +118,7 @@ const cleanup = (stack: Test.ScratchStack, slug: string) =>
 describe(
   "GitHub AppInstallation helpers",
   {
-    tags: [
-      "unit",
-      "provider:github",
-      "provider:github:appinstallation",
-      "local",
-    ],
+    tags: ["unit", "provider:github", "provider:github:appinstallation", "local"],
   },
   () => {
     it("builds install, settings and permission-review URLs", () => {
@@ -146,9 +131,7 @@ describe(
           accountType: "Organization",
           installationId: 123,
         }),
-      ).toBe(
-        "https://github.com/organizations/FD-Test-Org/settings/installations/123",
-      );
+      ).toBe("https://github.com/organizations/FD-Test-Org/settings/installations/123");
       expect(
         GitHub.installationSettingsUrl({
           account: "pattobrien",
@@ -195,9 +178,10 @@ describe(
     });
 
     it("computes the selected-repository delta", () => {
-      expect(
-        GitHub.installationRepositoryDelta(["b", "c"], ["a", "b"]),
-      ).toEqual({ add: ["c"], remove: ["a"] });
+      expect(GitHub.installationRepositoryDelta(["b", "c"], ["a", "b"])).toEqual({
+        add: ["c"],
+        remove: ["a"],
+      });
       expect(GitHub.installationRepositoryDelta(["a"], ["a"])).toEqual({
         add: [],
         remove: [],
@@ -205,8 +189,7 @@ describe(
     });
 
     it("reports unapplied suspensions and vanished installations to the user", () => {
-      const url =
-        "https://github.com/organizations/FD-Test-Org/settings/installations/123";
+      const url = "https://github.com/organizations/FD-Test-Org/settings/installations/123";
       const notApplied = new GitHub.GitHubAppInstallationSuspensionNotApplied({
         desired: false,
         slug: "my-app",
@@ -319,9 +302,7 @@ test.provider(
       const installUrl = `https://github.com/apps/${app.slug}/installations/new`;
 
       const noTerminal = failureOf(
-        yield* Effect.exit(
-          stack.deploy(program(id, { installation: selected(repoA) })),
-        ),
+        yield* Effect.exit(stack.deploy(program(id, { installation: selected(repoA) }))),
       );
       expect(noTerminal).toMatchObject({
         _tag: "GitHubManualStepRequired",
@@ -352,20 +333,12 @@ test.provider(
       );
       expect(live.repository_selection).toBe("selected");
       expect(
-        yield* installedRepos(
-          app.appId,
-          app.privateKey,
-          installation!.installationId,
-        ),
+        yield* installedRepos(app.appId, app.privateKey, installation!.installationId),
       ).toEqual([repoA]);
 
       const quiet = autopilot();
-      const again = yield* quiet.run(
-        stack.deploy(program(id, { installation: selected(repoA) })),
-      );
-      expect(again.installation!.installationId).toBe(
-        installation!.installationId,
-      );
+      const again = yield* quiet.run(stack.deploy(program(id, { installation: selected(repoA) })));
+      expect(again.installation!.installationId).toBe(installation!.installationId);
       expect(quiet.launched).toEqual([]);
       expect(quiet.prompts).toEqual([]);
 
@@ -375,11 +348,7 @@ test.provider(
       );
       expect(added.installation!.repositories).toEqual([repoA, repoB]);
       expect(
-        yield* installedRepos(
-          app.appId,
-          app.privateKey,
-          installation!.installationId,
-        ),
+        yield* installedRepos(app.appId, app.privateKey, installation!.installationId),
       ).toEqual([repoA, repoB]);
 
       const removed = yield* quiet.run(
@@ -387,11 +356,7 @@ test.provider(
       );
       expect(removed.installation!.repositories).toEqual([repoB]);
       expect(
-        yield* installedRepos(
-          app.appId,
-          app.privateKey,
-          installation!.installationId,
-        ),
+        yield* installedRepos(app.appId, app.privateKey, installation!.installationId),
       ).toEqual([repoB]);
       expect(quiet.launched).toEqual([]);
 
@@ -432,29 +397,17 @@ test.provider(
       // Found on the account with no state, it is someone else's until
       // --adopt takes it over.
       const foreign = failureOf(
-        yield* Effect.exit(
-          quiet.run(
-            stack.deploy(program(id, { installation: selected(repoB) })),
-          ),
-        ),
+        yield* Effect.exit(quiet.run(stack.deploy(program(id, { installation: selected(repoB) })))),
       );
       expect(foreign).toMatchObject({ _tag: "OwnedBySomeoneElse" });
       const adopted = yield* quiet.run(
-        stack.deploy(
-          program(id, { installation: selected(repoB), adopt: true }),
-        ),
+        stack.deploy(program(id, { installation: selected(repoB), adopt: true })),
       );
-      expect(adopted.installation!.installationId).toBe(
-        installation!.installationId,
-      );
+      expect(adopted.installation!.installationId).toBe(installation!.installationId);
       expect(quiet.launched).toEqual([]);
 
       // Opted into destroy(): removing the resource uninstalls through the API.
-      yield* quiet.run(
-        stack.deploy(
-          program(id, { installation: selected(repoB), destroy: true }),
-        ),
-      );
+      yield* quiet.run(stack.deploy(program(id, { installation: selected(repoB), destroy: true })));
       yield* quiet.run(stack.deploy(program(id, {})));
       const gone = yield* Effect.exit(
         Effect.tryPromise(() =>
@@ -465,9 +418,7 @@ test.provider(
       );
       expect(gone._tag).toBe("Failure");
       expect(quiet.launched).toEqual([]);
-    }).pipe(
-      Effect.ensuring(cleanup(stack, appName("install")).pipe(Effect.ignore)),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("install")).pipe(Effect.ignore))),
   browserTest,
 );
 
@@ -499,9 +450,7 @@ test.provider(
         installation: selected(repoA),
       };
       const pending = failureOf(
-        yield* Effect.exit(
-          autopilot({ idle: true }).run(stack.deploy(program(id, raised))),
-        ),
+        yield* Effect.exit(autopilot({ idle: true }).run(stack.deploy(program(id, raised)))),
       );
       const reviewUrl = `https://github.com/organizations/${owner}/settings/installations/${installation!.installationId}/permissions/update`;
       expect(pending).toMatchObject({
@@ -514,18 +463,12 @@ test.provider(
 
       yield* acceptPermissionsInUi(reviewUrl);
 
-      const accepted = yield* autopilot().run(
-        stack.deploy(program(id, raised)),
-      );
-      expect(accepted.installation!.installationId).toBe(
-        installation!.installationId,
-      );
+      const accepted = yield* autopilot().run(stack.deploy(program(id, raised)));
+      expect(accepted.installation!.installationId).toBe(installation!.installationId);
       expect(accepted.installation!.permissions).toMatchObject({
         issues: "write",
       });
-    }).pipe(
-      Effect.ensuring(cleanup(stack, appName("perms")).pipe(Effect.ignore)),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("perms")).pipe(Effect.ignore))),
   browserTest,
 );
 
@@ -547,16 +490,10 @@ test.provider(
 
       const pilot = autopilot();
       const { app, installation } = yield* nonInteractive(
-        pilot.run(
-          stack.deploy(
-            program(id, { installation: selected(repoA), destroy: true }),
-          ),
-        ),
+        pilot.run(stack.deploy(program(id, { installation: selected(repoA), destroy: true }))),
       );
       expect(pilot.prompts).toEqual([]);
-      expect(pilot.launched).toContain(
-        `https://github.com/apps/${app.slug}/installations/new`,
-      );
+      expect(pilot.launched).toContain(`https://github.com/apps/${app.slug}/installations/new`);
       const { data: live } = yield* Effect.tryPromise(() =>
         appOctokit(app.appId, app.privateKey).rest.apps.getInstallation({
           installation_id: installation!.installationId,
@@ -568,11 +505,7 @@ test.provider(
       yield* nonInteractive(pilot.run(stack.destroy()));
       expect(pilot.prompts).toEqual([]);
       expect(yield* appExists(yield* Octokit, app.slug)).toBe(false);
-    }).pipe(
-      Effect.ensuring(
-        cleanup(stack, appName("auto-install")).pipe(Effect.ignore),
-      ),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("auto-install")).pipe(Effect.ignore))),
   unattended,
 );
 
@@ -599,9 +532,7 @@ test.provider(
           ),
         )
         .pipe(withManualStepTimeout("2 minutes"));
-      expect(switched.installation!.installationId).toBe(
-        installation!.installationId,
-      );
+      expect(switched.installation!.installationId).toBe(installation!.installationId);
       expect(switched.installation!.repositorySelection).toBe("all");
       expect(switched.installation!.repositories).toEqual([]);
       const { data: live } = yield* Effect.tryPromise(() =>
@@ -614,9 +545,7 @@ test.provider(
         `https://github.com/organizations/${owner}/settings/installations/${installation!.installationId}`,
       );
       expect(pilot.prompts).toEqual([]);
-    }).pipe(
-      Effect.ensuring(cleanup(stack, appName("switch")).pipe(Effect.ignore)),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("switch")).pipe(Effect.ignore))),
   unattended,
 );
 
@@ -649,9 +578,7 @@ test.provider(
           ),
         )
         .pipe(withManualStepTimeout("2 minutes"));
-      expect(accepted.installation!.installationId).toBe(
-        installation!.installationId,
-      );
+      expect(accepted.installation!.installationId).toBe(installation!.installationId);
       expect(accepted.installation!.permissions).toMatchObject({
         issues: "write",
       });
@@ -670,11 +597,7 @@ test.provider(
         `https://github.com/organizations/${owner}/settings/installations/${installation!.installationId}/permissions/update`,
       );
       expect(pilot.prompts).toEqual([]);
-    }).pipe(
-      Effect.ensuring(
-        cleanup(stack, appName("perms-auto")).pipe(Effect.ignore),
-      ),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("perms-auto")).pipe(Effect.ignore))),
   unattended,
 );
 
@@ -714,31 +637,19 @@ test.provider(
           }),
         ),
       );
-      expect(lifted.installation!.installationId).toBe(
-        installation!.installationId,
-      );
+      expect(lifted.installation!.installationId).toBe(installation!.installationId);
       expect(lifted.installation!.suspended).toBe(false);
       expect(lifted.installation!.suspendedAt).toBeUndefined();
       expect(lifted.installation!.suspendedBy).toBeUndefined();
       expect(lifted.installation!.repositories).toEqual([repoA, repoB]);
-      const live = yield* liveInstallation(
-        app.appId,
-        app.privateKey,
-        installation!.installationId,
-      );
+      const live = yield* liveInstallation(app.appId, app.privateKey, installation!.installationId);
       expect(live.suspended_at).toBeNull();
       expect(
-        yield* installedRepos(
-          app.appId,
-          app.privateKey,
-          installation!.installationId,
-        ),
+        yield* installedRepos(app.appId, app.privateKey, installation!.installationId),
       ).toEqual([repoA, repoB]);
       expect(quiet.launched).toEqual([]);
       expect(quiet.prompts).toEqual([]);
-    }).pipe(
-      Effect.ensuring(cleanup(stack, appName("suspend")).pipe(Effect.ignore)),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("suspend")).pipe(Effect.ignore))),
   unattended,
 );
 
@@ -792,28 +703,16 @@ test.provider(
       const lifted = yield* pilot
         .run(stack.deploy(program(id, unsuspend)))
         .pipe(withManualStepTimeout("2 minutes"));
-      expect(lifted.installation!.installationId).toBe(
-        installation!.installationId,
-      );
+      expect(lifted.installation!.installationId).toBe(installation!.installationId);
       expect(lifted.installation!.suspended).toBe(false);
       expect(lifted.installation!.suspendedAt).toBeUndefined();
       expect(pilot.launched).toContain(settingsUrl);
       expect(pilot.prompts).toEqual([]);
-      const live = yield* liveInstallation(
-        app.appId,
-        app.privateKey,
-        installation!.installationId,
-      );
+      const live = yield* liveInstallation(app.appId, app.privateKey, installation!.installationId);
       expect(live.suspended_at).toBeNull();
 
-      yield* pilot
-        .run(stack.destroy())
-        .pipe(withManualStepTimeout("2 minutes"));
+      yield* pilot.run(stack.destroy()).pipe(withManualStepTimeout("2 minutes"));
       expect(yield* appExists(yield* Octokit, app.slug)).toBe(false);
-    }).pipe(
-      Effect.ensuring(
-        cleanup(stack, appName("suspend-ui")).pipe(Effect.ignore),
-      ),
-    ),
+    }).pipe(Effect.ensuring(cleanup(stack, appName("suspend-ui")).pipe(Effect.ignore))),
   unattended,
 );

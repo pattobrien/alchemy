@@ -1,9 +1,9 @@
-import { decodeBase32, nextUnusedCode, totp } from "@/GitHub/Totp.ts";
 import { describe, expect, it } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Fiber from "effect/Fiber";
 import * as Redacted from "effect/Redacted";
 import * as TestClock from "effect/testing/TestClock";
+import { decodeBase32, nextUnusedCode, totp } from "@/GitHub/Totp.ts";
 
 // RFC 6238 Appendix B: the SHA-1 secret "12345678901234567890" in base32.
 const secret = Redacted.make("GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ");
@@ -22,9 +22,7 @@ describe("GitHub TOTP", { tags: ["unit", "local"] }, () => {
     expect(Buffer.from(decodeBase32(Redacted.value(secret))).toString()).toBe(
       "12345678901234567890",
     );
-    expect(Buffer.from(decodeBase32("gezd gnbv-gy3tqojq====")).toString()).toBe(
-      "1234567890",
-    );
+    expect(Buffer.from(decodeBase32("gezd gnbv-gy3tqojq====")).toString()).toBe("1234567890");
   });
 
   for (const [seconds, code] of vectors) {

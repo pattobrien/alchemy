@@ -36,9 +36,7 @@ export interface GitHubBrowserOptions {
 }
 
 /** The browser profile holds no GitHub session (or it could not be restored). */
-export class GitHubBrowserSignedOut extends Data.TaggedError(
-  "GitHubBrowserSignedOut",
-)<{
+export class GitHubBrowserSignedOut extends Data.TaggedError("GitHubBrowserSignedOut")<{
   readonly url: string;
   readonly profileDir: string;
   readonly detail?: string;
@@ -50,9 +48,7 @@ export class GitHubBrowserSignedOut extends Data.TaggedError(
 }
 
 /** GitHub asked to confirm access (sudo mode) and nothing can answer it. */
-export class GitHubBrowserSudoRequired extends Data.TaggedError(
-  "GitHubBrowserSudoRequired",
-)<{
+export class GitHubBrowserSudoRequired extends Data.TaggedError("GitHubBrowserSudoRequired")<{
   readonly url: string;
   readonly profileDir: string;
   readonly detail?: string;
@@ -64,9 +60,7 @@ export class GitHubBrowserSudoRequired extends Data.TaggedError(
 }
 
 /** GitHub's secondary rate limit blocked the browser session. */
-export class GitHubBrowserRateLimited extends Data.TaggedError(
-  "GitHubBrowserRateLimited",
-)<{
+export class GitHubBrowserRateLimited extends Data.TaggedError("GitHubBrowserRateLimited")<{
   readonly url: string;
 }> {
   readonly [UserFacingError] = true;
@@ -83,10 +77,7 @@ export type GitHubBrowserError =
 
 export const isGitHubBrowserError = (
   error: unknown,
-): error is
-  | GitHubBrowserSignedOut
-  | GitHubBrowserSudoRequired
-  | GitHubBrowserRateLimited =>
+): error is GitHubBrowserSignedOut | GitHubBrowserSudoRequired | GitHubBrowserRateLimited =>
   error instanceof GitHubBrowserSignedOut ||
   error instanceof GitHubBrowserSudoRequired ||
   error instanceof GitHubBrowserRateLimited;
@@ -141,11 +132,9 @@ const sessions = new WeakMap<Page, Session>();
 
 const pathOf = (page: Page) => new URL(page.url()).pathname;
 
-const onOrigin = (page: Page, origin: string) =>
-  new URL(page.url()).origin === origin;
+const onOrigin = (page: Page, origin: string) => new URL(page.url()).origin === origin;
 
-const currentUser = (page: Page) =>
-  page.locator(SIGN_IN.userLogin).getAttribute("content");
+const currentUser = (page: Page) => page.locator(SIGN_IN.userLogin).getAttribute("content");
 
 const onSudoPrompt = async (page: Page) =>
   SUDO.path.test(pathOf(page)) || (await page.locator(SUDO.form).count()) > 0;
@@ -156,11 +145,7 @@ const submitForm = async (page: Page) => {
   await loaded;
 };
 
-const verifySignedIn = async (
-  page: Page,
-  session: Session,
-  username: string,
-) => {
+const verifySignedIn = async (page: Page, session: Session, username: string) => {
   const user = await currentUser(page);
   if (user === null || user.toLowerCase() !== username.toLowerCase()) {
     throw new GitHubBrowserSignedOut({
@@ -176,8 +161,7 @@ const enterTwoFactorCode = async (page: Page, session: Session) => {
     throw new GitHubBrowserSignedOut({
       url: page.url(),
       profileDir: session.profileDir,
-      detail:
-        "GitHub asked for a two-factor code and no GITHUB_BROWSER_TOTP_SECRET is configured",
+      detail: "GitHub asked for a two-factor code and no GITHUB_BROWSER_TOTP_SECRET is configured",
     });
   }
   const input = page.locator(SIGN_IN.totp);
@@ -189,15 +173,9 @@ const enterTwoFactorCode = async (page: Page, session: Session) => {
   await submitForm(page);
 };
 
-const signIn = async (
-  page: Page,
-  session: Session,
-  credentials: GitHubBrowserCredentials,
-) => {
+const signIn = async (page: Page, session: Session, credentials: GitHubBrowserCredentials) => {
   await page.locator(SIGN_IN.username).fill(credentials.username);
-  await page
-    .locator(SIGN_IN.password)
-    .fill(Redacted.value(credentials.password));
+  await page.locator(SIGN_IN.password).fill(Redacted.value(credentials.password));
   await submitForm(page);
   if (SIGN_IN.twoFactorPath.test(pathOf(page))) {
     await enterTwoFactorCode(page, session);
@@ -219,11 +197,7 @@ const deviceVerification = (page: Page, session: Session) =>
     detail: `GitHub requires device verification (a code sent by email) for this browser profile on ${page.url()}`,
   });
 
-const confirmSudo = async (
-  page: Page,
-  session: Session,
-  credentials: GitHubBrowserCredentials,
-) => {
+const confirmSudo = async (page: Page, session: Session, credentials: GitHubBrowserCredentials) => {
   const url = page.url();
   const loaded = page.waitForEvent("load");
   if (credentials.totpSecret !== undefined) {
@@ -258,9 +232,7 @@ const confirmSudo = async (
 export const guard = async (page: Page): Promise<void> => {
   const session = sessions.get(page);
   if (session === undefined) {
-    throw new Error(
-      "guard(page) was called on a page that GitHubBrowser.page did not open",
-    );
+    throw new Error("guard(page) was called on a page that GitHubBrowser.page did not open");
   }
   await page.waitForLoadState();
   if ((await page.getByText(RATE_LIMIT_TEXT).count()) > 0) {
@@ -296,15 +268,11 @@ interface ResolvedOptions {
   readonly credentials: GitHubBrowserCredentials | undefined;
 }
 
-const resolveOptions = (
-  options: GitHubBrowserOptions,
-): Effect.Effect<ResolvedOptions> =>
+const resolveOptions = (options: GitHubBrowserOptions): Effect.Effect<ResolvedOptions> =>
   Effect.sync(() => ({
     profileDir:
       options.profileDir ??
-      browserProfileDir(
-        options.profile ?? process.env.ALCHEMY_PROFILE ?? DEFAULT_PROFILE_NAME,
-      ),
+      browserProfileDir(options.profile ?? process.env.ALCHEMY_PROFILE ?? DEFAULT_PROFILE_NAME),
     origin: githubWebOrigin(options.baseUrl),
     credentials: options.credentials,
   }));
@@ -332,9 +300,7 @@ const make = (resolved: ResolvedOptions) =>
         })
         .pipe(
           Effect.catchTag("BrowserAutomationFailed", (error) =>
-            Effect.fail(
-              isGitHubBrowserError(error.cause) ? error.cause : error,
-            ),
+            Effect.fail(isGitHubBrowserError(error.cause) ? error.cause : error),
           ),
         );
     return GitHubBrowser.of({
@@ -366,40 +332,33 @@ export const layer = (
  * `ALCHEMY_GITHUB_BROWSER_PROFILE` and `GITHUB_BROWSER_HEADLESS=0` to show
  * the window. Unset variables leave their option undefined.
  */
-export const optionsFromEnv: Effect.Effect<GitHubBrowserOptions> = Effect.gen(
-  function* () {
-    const env = yield* Effect.sync(() => ({
-      username: process.env.GITHUB_BROWSER_USERNAME,
-      password: process.env.GITHUB_BROWSER_PASSWORD,
-      totpSecret: process.env.GITHUB_BROWSER_TOTP_SECRET,
-      profileDir: process.env.ALCHEMY_GITHUB_BROWSER_PROFILE,
-      headless: process.env.GITHUB_BROWSER_HEADLESS,
-    }));
-    if ((env.username === undefined) !== (env.password === undefined)) {
-      return yield* Effect.die(
-        new Error(
-          "GITHUB_BROWSER_USERNAME and GITHUB_BROWSER_PASSWORD must be set together",
-        ),
-      );
-    }
-    const credentials: GitHubBrowserCredentials | undefined =
-      env.username === undefined || env.password === undefined
-        ? undefined
-        : {
-            username: env.username,
-            password: Redacted.make(env.password),
-            totpSecret:
-              env.totpSecret === undefined
-                ? undefined
-                : Redacted.make(env.totpSecret),
-          };
-    return {
-      profileDir: env.profileDir,
-      headless: env.headless === undefined ? undefined : env.headless !== "0",
-      credentials,
-    };
-  },
-);
+export const optionsFromEnv: Effect.Effect<GitHubBrowserOptions> = Effect.gen(function* () {
+  const env = yield* Effect.sync(() => ({
+    username: process.env.GITHUB_BROWSER_USERNAME,
+    password: process.env.GITHUB_BROWSER_PASSWORD,
+    totpSecret: process.env.GITHUB_BROWSER_TOTP_SECRET,
+    profileDir: process.env.ALCHEMY_GITHUB_BROWSER_PROFILE,
+    headless: process.env.GITHUB_BROWSER_HEADLESS,
+  }));
+  if ((env.username === undefined) !== (env.password === undefined)) {
+    return yield* Effect.die(
+      new Error("GITHUB_BROWSER_USERNAME and GITHUB_BROWSER_PASSWORD must be set together"),
+    );
+  }
+  const credentials: GitHubBrowserCredentials | undefined =
+    env.username === undefined || env.password === undefined
+      ? undefined
+      : {
+          username: env.username,
+          password: Redacted.make(env.password),
+          totpSecret: env.totpSecret === undefined ? undefined : Redacted.make(env.totpSecret),
+        };
+  return {
+    profileDir: env.profileDir,
+    headless: env.headless === undefined ? undefined : env.headless !== "0",
+    credentials,
+  };
+});
 
 /**
  * Configure from the environment (see {@link optionsFromEnv}); headless
@@ -463,21 +422,14 @@ export const login = (
           ).pipe(
             Effect.provide(browser),
             Effect.catchTag("BrowserAutomationFailed", (error) =>
-              Effect.fail(
-                isGitHubBrowserError(error.cause) ? error.cause : error,
-              ),
+              Effect.fail(isGitHubBrowserError(error.cause) ? error.cause : error),
             ),
           )
         : yield* GitHubBrowser.use((github) =>
-            github.page(
-              target,
-              async (page) => (await currentUser(page)) ?? "",
-            ),
+            github.page(target, async (page) => (await currentUser(page)) ?? ""),
           ).pipe(
             Effect.provide(
-              Layer.effect(GitHubBrowser, make(resolved)).pipe(
-                Layer.provide(browser),
-              ),
+              Layer.effect(GitHubBrowser, make(resolved)).pipe(Layer.provide(browser)),
             ),
           );
     return { profileDir: resolved.profileDir, user };

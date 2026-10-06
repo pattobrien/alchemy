@@ -12,19 +12,15 @@ import { GitHubBrowser, type GitHubBrowserError } from "./Browser.ts";
 /** A GitHub App step that has no API and must be done in the browser. */
 export type ManualStep = "register-app" | "delete-app" | "install-app";
 
-const rerun = (step: ManualStep) =>
-  step === "delete-app" ? "destroy" : "deploy";
+const rerun = (step: ManualStep) => (step === "delete-app" ? "destroy" : "deploy");
 
 /** Bounds every wait for a human to finish a {@link ManualStep}. */
-export const ManualStepTimeout = Context.Reference<Duration.Input>(
-  "GitHub::ManualStepTimeout",
-  { defaultValue: () => "10 minutes" },
-);
+export const ManualStepTimeout = Context.Reference<Duration.Input>("GitHub::ManualStepTimeout", {
+  defaultValue: () => "10 minutes",
+});
 
 /** A manual step was needed, but no interactive terminal is attached. */
-export class GitHubManualStepRequired extends Data.TaggedError(
-  "GitHubManualStepRequired",
-)<{
+export class GitHubManualStepRequired extends Data.TaggedError("GitHubManualStepRequired")<{
   readonly step: ManualStep;
   readonly url: string;
   readonly action: string;
@@ -38,9 +34,7 @@ export class GitHubManualStepRequired extends Data.TaggedError(
 }
 
 /** Nobody finished a manual step within {@link ManualStepTimeout}. */
-export class GitHubManualStepTimeout extends Data.TaggedError(
-  "GitHubManualStepTimeout",
-)<{
+export class GitHubManualStepTimeout extends Data.TaggedError("GitHubManualStepTimeout")<{
   readonly step: ManualStep;
   readonly url: string;
   readonly action: string;
@@ -87,9 +81,7 @@ export const withBrowser = <A, E, R>(
       Option.match({
         onNone: () => Effect.succeed(Option.none<A>()),
         onSome: (browser) =>
-          Effect.provideService(automate, GitHubBrowser, browser).pipe(
-            Effect.map(Option.some),
-          ),
+          Effect.provideService(automate, GitHubBrowser, browser).pipe(Effect.map(Option.some)),
       }),
     ),
   );
@@ -130,20 +122,14 @@ export const manualStep = <A, E, R>(options: {
         );
       const browser = yield* Effect.serviceOption(GitHubBrowser);
       if (Option.isSome(browser)) {
-        return yield* Effect.provideService(
-          options.automate,
-          GitHubBrowser,
-          browser.value,
-        ).pipe(
+        return yield* Effect.provideService(options.automate, GitHubBrowser, browser.value).pipe(
           Effect.andThen(options.until),
           Effect.timeoutOrElse({ duration: timeout, orElse: timedOut }),
         );
       }
       const interaction = yield* Interaction.Interaction;
       // Invoked later by the prompt's keyboard handler, outside this fiber.
-      const reopen = Effect.runPromiseWith(
-        yield* Effect.context<ChildProcessSpawner>(),
-      );
+      const reopen = Effect.runPromiseWith(yield* Effect.context<ChildProcessSpawner>());
       return yield* Effect.raceFirst(
         interaction.prompt
           .awaitExternal({
@@ -159,10 +145,7 @@ export const manualStep = <A, E, R>(options: {
             ),
             Effect.andThen(Effect.never),
           ),
-        Interaction.openUrl(open).pipe(
-          Effect.ignore,
-          Effect.andThen(options.until),
-        ),
+        Interaction.openUrl(open).pipe(Effect.ignore, Effect.andThen(options.until)),
       ).pipe(Effect.timeoutOrElse({ duration: timeout, orElse: timedOut }));
     }),
   );

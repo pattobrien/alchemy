@@ -151,15 +151,12 @@ export interface AppInstallation extends Resource<
  * @resource
  * @product App
  */
-export const AppInstallation = Resource<AppInstallation>(
-  "GitHub.AppInstallation",
-  { defaultRemovalPolicy: "retain" },
-);
+export const AppInstallation = Resource<AppInstallation>("GitHub.AppInstallation", {
+  defaultRemovalPolicy: "retain",
+});
 
 /** The installation differs in a way only the account owner can fix. */
-export class GitHubAppInstallationDrift extends Data.TaggedError(
-  "GitHubAppInstallationDrift",
-)<{
+export class GitHubAppInstallationDrift extends Data.TaggedError("GitHubAppInstallationDrift")<{
   readonly reason: "repository-selection" | "permissions-pending" | "suspended";
   readonly url: string;
   readonly slug: string;
@@ -212,10 +209,7 @@ interface InstallationTarget {
   readonly baseUrl?: string;
 }
 
-export const appInstallUrl = (options: {
-  readonly slug: string;
-  readonly baseUrl?: string;
-}) =>
+export const appInstallUrl = (options: { readonly slug: string; readonly baseUrl?: string }) =>
   `${githubWebOrigin(options.baseUrl)}/apps/${options.slug}/installations/new`;
 
 export const installationSettingsUrl = (target: InstallationTarget) =>
@@ -224,8 +218,7 @@ export const installationSettingsUrl = (target: InstallationTarget) =>
 export const installationPermissionsReviewUrl = (target: InstallationTarget) =>
   `${installationSettingsUrl(target)}/permissions/update`;
 
-const rank = (access: string | undefined) =>
-  ["read", "write", "admin"].indexOf(access ?? "") + 1;
+const rank = (access: string | undefined) => ["read", "write", "admin"].indexOf(access ?? "") + 1;
 
 /** App permissions the installation has not accepted: raised or added. */
 export const installationPermissionsPending = (
@@ -257,8 +250,7 @@ export const installationSuspensionAction = (options: {
 }): "none" | "suspend" | "unsuspend" | "unsuspend-in-browser" => {
   if ((options.suspendedAt !== undefined) === options.desired) return "none";
   if (options.desired) return "suspend";
-  return options.suspendedBy?.toLowerCase() ===
-    `${options.slug}[bot]`.toLowerCase()
+  return options.suspendedBy?.toLowerCase() === `${options.slug}[bot]`.toLowerCase()
     ? "unsuspend"
     : "unsuspend-in-browser";
 };
@@ -275,8 +267,7 @@ const findInstallation = (app: () => RestOctokit, account: string) =>
     Effect.map((installations) =>
       installations?.find(
         (installation) =>
-          accountLogin(installation.account)?.toLowerCase() ===
-          account.toLowerCase(),
+          accountLogin(installation.account)?.toLowerCase() === account.toLowerCase(),
       ),
     ),
   );
@@ -289,18 +280,10 @@ const getInstallation = (app: () => RestOctokit, installationId: number) =>
     Effect.map((found) => found?.data ?? undefined),
   );
 
-const accountLogin = (
-  account: { readonly login: string } | { readonly slug: string } | null,
-) =>
-  account === null
-    ? undefined
-    : "login" in account
-      ? account.login
-      : account.slug;
+const accountLogin = (account: { readonly login: string } | { readonly slug: string } | null) =>
+  account === null ? undefined : "login" in account ? account.login : account.slug;
 
-type LiveInstallation = NonNullable<
-  Effect.Success<ReturnType<typeof getInstallation>>
->;
+type LiveInstallation = NonNullable<Effect.Success<ReturnType<typeof getInstallation>>>;
 
 const targetOf = (
   installation: LiveInstallation,
@@ -308,30 +291,23 @@ const targetOf = (
   baseUrl: string | undefined,
 ): InstallationTarget => ({
   account: accountLogin(installation.account) ?? account,
-  accountType:
-    installation.target_type === "Organization" ? "Organization" : "User",
+  accountType: installation.target_type === "Organization" ? "Organization" : "User",
   installationId: installation.id,
   baseUrl,
 });
 
 const listRepositories = (octokit: RestOctokit, installationId: number) =>
   Effect.tryPromise(() =>
-    octokit.paginate(
-      octokit.rest.apps.listInstallationReposForAuthenticatedUser,
-      {
-        installation_id: installationId,
-        per_page: 100,
-      },
-    ),
+    octokit.paginate(octokit.rest.apps.listInstallationReposForAuthenticatedUser, {
+      installation_id: installationId,
+      per_page: 100,
+    }),
   );
 
 const suspensionOf = (installation: LiveInstallation) => ({
   suspended: installation.suspended_at !== null,
   suspendedAt: installation.suspended_at ?? undefined,
-  suspendedBy:
-    installation.suspended_at === null
-      ? undefined
-      : installation.suspended_by?.login,
+  suspendedBy: installation.suspended_at === null ? undefined : installation.suspended_by?.login,
 });
 
 const attrsOf = (
@@ -342,10 +318,7 @@ const attrsOf = (
   installationId: installation.id,
   account: target.account,
   repositorySelection: installation.repository_selection,
-  repositories:
-    installation.repository_selection === "selected"
-      ? [...repositories].sort()
-      : [],
+  repositories: installation.repository_selection === "selected" ? [...repositories].sort() : [],
   permissions: Object.fromEntries(Object.entries(installation.permissions)),
   events: [...installation.events].sort(),
   htmlUrl: installationSettingsUrl(target),
@@ -364,12 +337,9 @@ const repairInstallationDrift = (options: {
   Effect.gen(function* () {
     if (!options.drifted(options.installation)) return options.installation;
     const repaired = yield* withBrowser(
-      options.fix.pipe(
-        Effect.andThen(getInstallation(options.app, options.installation.id)),
-      ),
+      options.fix.pipe(Effect.andThen(getInstallation(options.app, options.installation.id))),
     );
-    const installation =
-      Option.getOrUndefined(repaired) ?? options.installation;
+    const installation = Option.getOrUndefined(repaired) ?? options.installation;
     if (options.drifted(installation)) return yield* options.error;
     return installation;
   });
@@ -388,9 +358,7 @@ const awaitInstallation = (options: {
       times: 10,
     }),
     Effect.flatMap((found) =>
-      found === undefined
-        ? Effect.fail(options.missing)
-        : Effect.succeed(found),
+      found === undefined ? Effect.fail(options.missing) : Effect.succeed(found),
     ),
   );
 
@@ -473,9 +441,7 @@ export const AppInstallationProvider = () =>
         app().rest.apps.getAuthenticated(),
       );
       if (registration === null) {
-        return yield* Effect.fail(
-          new Error(`GitHub App ${news.appId} could not be read`),
-        );
+        return yield* Effect.fail(new Error(`GitHub App ${news.appId} could not be read`));
       }
 
       // Observe by id, then by account (a reinstall has a new id), then
@@ -483,9 +449,7 @@ export const AppInstallationProvider = () =>
       const slug = registration.slug ?? "";
       const installUrl = appInstallUrl({ slug, baseUrl });
       const found =
-        (output === undefined
-          ? undefined
-          : yield* getInstallation(app, output.installationId)) ??
+        (output === undefined ? undefined : yield* getInstallation(app, output.installationId)) ??
         (yield* findInstallation(app, news.account)) ??
         (yield* manualStep({
           step: "install-app",
@@ -518,8 +482,7 @@ export const AppInstallationProvider = () =>
       // Sync — what only the account owner can change.
       const selected = yield* repairInstallationDrift({
         installation: active,
-        drifted: (installation) =>
-          installation.repository_selection !== news.repositorySelection,
+        drifted: (installation) => installation.repository_selection !== news.repositorySelection,
         fix: setInstallationRepositorySelection({
           settingsUrl: installationSettingsUrl(target),
           repositorySelection: news.repositorySelection,
@@ -536,10 +499,8 @@ export const AppInstallationProvider = () =>
       const installation = yield* repairInstallationDrift({
         installation: selected,
         drifted: (installation) =>
-          installationPermissionsPending(
-            registration.permissions,
-            installation.permissions,
-          ).length > 0,
+          installationPermissionsPending(registration.permissions, installation.permissions)
+            .length > 0,
         fix: acceptInstallationPermissions({
           reviewUrl: installationPermissionsReviewUrl(target),
         }),
@@ -581,9 +542,7 @@ export const AppInstallationProvider = () =>
         }
       }
 
-      const synced = suspended
-        ? yield* syncSuspension(installation)
-        : installation;
+      const synced = suspended ? yield* syncSuspension(installation) : installation;
 
       return attrsOf(synced, target, desired);
     }),
@@ -614,11 +573,7 @@ export const AppInstallationProvider = () =>
     delete: Effect.fn(function* ({ olds, output }) {
       const baseUrl = yield* effectiveGitHubBaseUrl(olds.baseUrl);
       yield* unlessStatus([404], () =>
-        appOctokit(
-          olds.appId,
-          olds.privateKey,
-          baseUrl,
-        ).rest.apps.deleteInstallation({
+        appOctokit(olds.appId, olds.privateKey, baseUrl).rest.apps.deleteInstallation({
           installation_id: output.installationId,
         }),
       );
