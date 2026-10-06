@@ -1,9 +1,13 @@
-import * as Clock from "effect/Clock";
-import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
+import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
 import type { Locator, Page } from "playwright-core";
-import { GitHubBrowser, guard, type GitHubBrowserError } from "./Browser.ts";
+import {
+  GitHubBrowser,
+  GitHubBrowserRateLimited,
+  guard,
+  type GitHubBrowserError,
+} from "./Browser.ts";
 
 export type RepositorySelection = "all" | "selected";
 export type PermissionAccess = "none" | "read" | "write" | "admin";
@@ -86,18 +90,7 @@ const MANIFEST = {
   create: /^Create GitHub App/,
 } as const;
 
-const MANIFEST_GAP = Duration.seconds(30);
 const manifestTurn = Semaphore.makeUnsafe(1);
-let nextManifestAt = 0;
-
-const awaitManifestTurn = manifestTurn.withPermits(1)(
-  Effect.gen(function* () {
-    const now = yield* Clock.currentTimeMillis;
-    const wait = Math.max(nextManifestAt - now, 0);
-    nextManifestAt = now + wait + Duration.toMillis(MANIFEST_GAP);
-    yield* Effect.sleep(Duration.millis(wait));
-  }),
-);
 
 export const registerAppFromManifestPage = async (
   page: Page,
@@ -107,7 +100,14 @@ export const registerAppFromManifestPage = async (
   await page.waitForURL((url) => url.origin !== local);
   await guard(page);
   await page.getByRole("button", { name: MANIFEST.create }).click();
-  await guard(page);
+  await guard(page).catch((error: unknown) => {
+    if (error instanceof GitHubBrowserRateLimited) {
+      throw new Error(
+        `GitHub rate-limited the submission on ${error.url}; the app may be registered without its manifest code. Delete it from the owner's app settings before running again`,
+      );
+    }
+    throw error;
+  });
   await page.waitForURL((url) => url.origin === local);
 };
 
@@ -115,12 +115,17 @@ export const registerAppFromManifestPage = async (
 export const registerAppFromManifest: WebFlow<{
   readonly manifestUrl: string;
 }> = (input) =>
-  Effect.andThen(
-    awaitManifestTurn,
+  manifestTurn.withPermits(1)(
     webFlow(
       (input: { readonly manifestUrl: string }) => input.manifestUrl,
       registerAppFromManifestPage,
-    )(input),
+    )(input).pipe(
+      Effect.retry({
+        while: (error) => error._tag === "GitHubBrowserRateLimited",
+        schedule: Schedule.spaced("15 seconds"),
+        times: 8,
+      }),
+    ),
   );
 
 // {owner settings}/apps/{slug}/advanced

@@ -427,7 +427,7 @@ test.provider(
   "installs unattended",
   (stack) =>
     Effect.gen(function* () {
-      const id = "unattended";
+      const id = "auto-install";
       yield* cleanup(stack, appName(id));
       yield* ensureFixtureRepos(yield* Octokit);
 
@@ -456,7 +456,7 @@ test.provider(
       expect(yield* appExists(yield* Octokit, app.slug)).toBe(false);
     }).pipe(
       Effect.ensuring(
-        cleanup(stack, appName("unattended")).pipe(Effect.ignore),
+        cleanup(stack, appName("auto-install")).pipe(Effect.ignore),
       ),
     ),
   unattended,
