@@ -3,7 +3,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import { browserProfileDir } from "../../Auth/Paths.ts";
 import { resolveProfileName } from "../../Auth/Resolve.ts";
-import { login } from "../../GitHub/Browser.ts";
+import { login, optionsFromEnv } from "../../GitHub/Browser.ts";
 import type { Target } from "../Session.ts";
 
 export interface BrowserLoginTarget extends Target {
@@ -14,15 +14,21 @@ export interface BrowserLoginTarget extends Target {
 const resolveProfile = (target: Target) =>
   resolveProfileName(Option.fromNullishOr(target.envFile), target.profile);
 
-/** Open a headed browser so the user can sign in to GitHub's web UI. */
+/**
+ * Sign in to GitHub's web UI and save the session to the browser profile.
+ * Unattended with `GITHUB_BROWSER_USERNAME`, `GITHUB_BROWSER_PASSWORD` and
+ * `GITHUB_BROWSER_TOTP_SECRET`; otherwise a window opens for the user.
+ */
 export const browserLogin = Effect.fn(
   "Alchemist.provider.github.browser-login",
 )(function* (target: BrowserLoginTarget) {
   const profile = yield* resolveProfile(target);
+  const env = yield* optionsFromEnv;
   const result = yield* login({
     profile,
     baseUrl: target.baseUrl,
-    headless: false,
+    headless: env.headless,
+    credentials: env.credentials,
   });
   return { profile, ...result };
 });

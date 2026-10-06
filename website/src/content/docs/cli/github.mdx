@@ -20,10 +20,12 @@ interaction.
 alchemy provider github browser-login [options]
 ```
 
-Open a headed browser on GitHub's app settings page and wait until you are
-signed in. The session is saved to a browser profile under
-`~/.alchemy/browser/<profile>` and reused by every later deploy that opts in
-with `GitHub.providers({ browser: true })`.
+Sign in to GitHub's app settings page and save the session to a browser
+profile under `~/.alchemy/browser/<profile>`, reused by every later deploy
+that opts in with `GitHub.providers({ browser: true })`. With
+`GITHUB_BROWSER_USERNAME`, `GITHUB_BROWSER_PASSWORD` and
+`GITHUB_BROWSER_TOTP_SECRET` set, sign-in runs headless and unattended;
+without them a browser window opens and waits until you are signed in.
 
 <Terminal content={`[g]✓[/g] Signed in as octocat.
   Browser profile: /Users/me/.alchemy/browser/default

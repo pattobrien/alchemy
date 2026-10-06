@@ -361,48 +361,58 @@ export const layer = (
   );
 
 /**
- * Configure from the environment: `GITHUB_BROWSER_USERNAME`,
+ * Options from the environment: `GITHUB_BROWSER_USERNAME`,
  * `GITHUB_BROWSER_PASSWORD`, `GITHUB_BROWSER_TOTP_SECRET`,
  * `ALCHEMY_GITHUB_BROWSER_PROFILE` and `GITHUB_BROWSER_HEADLESS=0` to show
- * the window. Explicit `overrides` win over the environment.
+ * the window. Unset variables leave their option undefined.
+ */
+export const optionsFromEnv: Effect.Effect<GitHubBrowserOptions> = Effect.gen(
+  function* () {
+    const env = yield* Effect.sync(() => ({
+      username: process.env.GITHUB_BROWSER_USERNAME,
+      password: process.env.GITHUB_BROWSER_PASSWORD,
+      totpSecret: process.env.GITHUB_BROWSER_TOTP_SECRET,
+      profileDir: process.env.ALCHEMY_GITHUB_BROWSER_PROFILE,
+      headless: process.env.GITHUB_BROWSER_HEADLESS,
+    }));
+    if ((env.username === undefined) !== (env.password === undefined)) {
+      return yield* Effect.die(
+        new Error(
+          "GITHUB_BROWSER_USERNAME and GITHUB_BROWSER_PASSWORD must be set together",
+        ),
+      );
+    }
+    const credentials: GitHubBrowserCredentials | undefined =
+      env.username === undefined || env.password === undefined
+        ? undefined
+        : {
+            username: env.username,
+            password: Redacted.make(env.password),
+            totpSecret:
+              env.totpSecret === undefined
+                ? undefined
+                : Redacted.make(env.totpSecret),
+          };
+    return {
+      profileDir: env.profileDir,
+      headless: env.headless === undefined ? undefined : env.headless !== "0",
+      credentials,
+    };
+  },
+);
+
+/**
+ * Configure from the environment (see {@link optionsFromEnv}); headless
+ * unless `GITHUB_BROWSER_HEADLESS=0`. Explicit `overrides` win over the
+ * environment.
  */
 export const fromEnv = (
   overrides: GitHubBrowserOptions = {},
 ): Layer.Layer<GitHubBrowser, never, FileSystem.FileSystem | Path.Path> =>
   Layer.unwrap(
-    Effect.gen(function* () {
-      const env = yield* Effect.sync(() => ({
-        username: process.env.GITHUB_BROWSER_USERNAME,
-        password: process.env.GITHUB_BROWSER_PASSWORD,
-        totpSecret: process.env.GITHUB_BROWSER_TOTP_SECRET,
-        profileDir: process.env.ALCHEMY_GITHUB_BROWSER_PROFILE,
-        headless: process.env.GITHUB_BROWSER_HEADLESS,
-      }));
-      if ((env.username === undefined) !== (env.password === undefined)) {
-        return yield* Effect.die(
-          new Error(
-            "GITHUB_BROWSER_USERNAME and GITHUB_BROWSER_PASSWORD must be set together",
-          ),
-        );
-      }
-      const credentials: GitHubBrowserCredentials | undefined =
-        env.username === undefined || env.password === undefined
-          ? undefined
-          : {
-              username: env.username,
-              password: Redacted.make(env.password),
-              totpSecret:
-                env.totpSecret === undefined
-                  ? undefined
-                  : Redacted.make(env.totpSecret),
-            };
-      return layer({
-        profileDir: env.profileDir,
-        headless: env.headless !== "0",
-        credentials,
-        ...overrides,
-      });
-    }),
+    Effect.map(optionsFromEnv, (env) =>
+      layer({ ...env, headless: env.headless ?? true, ...overrides }),
+    ),
   );
 
 const waitForHuman =
