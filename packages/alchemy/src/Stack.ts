@@ -131,6 +131,8 @@ export interface StackProps<Req> {
   state: Layer.Layer<State, never, StackServices>;
   /** Opt in to secret providers. When omitted, existing configuration is preserved. */
   secrets?: StackSecrets;
+  /** Map the CLI's stage onto this stack's own stage, e.g. every PR stage onto a shared `preview`. */
+  stage?: (stage: string) => string;
 }
 
 /**
@@ -139,7 +141,7 @@ export interface StackProps<Req> {
  */
 export type ConfiguredStackMeta<Req = never> = {
   readonly stackName: string;
-} & StackProps<Req>;
+} & Omit<StackProps<Req>, "stage">;
 
 export const Stack: Context.ServiceClass<
   Stack,
@@ -278,6 +280,8 @@ export interface MakeStackProps<ROut = never> {
   state: Layer.Layer<State, never, StackServices>;
   /** Opt in to secret providers. When omitted, existing configuration is preserved. */
   secrets?: StackSecrets;
+  /** Map the CLI's stage onto this stack's own stage. */
+  stage?: (stage: string) => string;
   /** @internal */
   stack?: StackSpec;
 }
@@ -333,6 +337,11 @@ export const make =
                 ),
               ),
             ),
+          ),
+          Layer.provideMerge(
+            options.stage
+              ? Layer.effect(Stage, Effect.map(Stage, options.stage))
+              : Layer.empty,
           ),
           Layer.buildWithScope(scope),
         );
