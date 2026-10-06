@@ -52,6 +52,7 @@
     "./Git/Hasher": "./src/Git/Hasher/index.ts",
     "./Http": "./src/Http/index.ts",
     "./Infisical": "./src/Infisical/index.ts",
+    "./Inngest": "./src/Inngest/index.ts",
     "./Kubernetes": "./src/Kubernetes/index.ts",
     "./Cli": "./src/Cli/index.ts",
     "./Cli/CliKit": "./src/Cli/CliKit/index.ts",
@@ -201,6 +202,11 @@
         "types": "./lib/Infisical/index.d.ts",
         "bun": "./src/Infisical/index.ts",
         "default": "./lib/Infisical/index.js"
+      },
+      "./Inngest": {
+        "types": "./lib/Inngest/index.d.ts",
+        "bun": "./src/Inngest/index.ts",
+        "default": "./lib/Inngest/index.js"
       },
       "./Kubernetes": {
         "types": "./lib/Kubernetes/index.d.ts",
@@ -417,6 +423,7 @@
     "@distilled.cloud/gcp": "workspace:*",
     "@distilled.cloud/hetzner": "workspace:*",
     "@distilled.cloud/infisical": "workspace:*",
+    "@distilled.cloud/inngest": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
     "@distilled.cloud/prisma": "workspace:*",
@@ -485,6 +492,7 @@
     "effect": "catalog:",
     "foldkit": "catalog:",
     "hono": "catalog:",
+    "inngest": "^4.21.1",
     "iovalkey": "catalog:",
     "isbot": "catalog:",
     "mongodb": "catalog:",

@@ -26,6 +26,7 @@ import { GcpAuth } from "../GCP/AuthProvider.ts";
 import { GitHubAuth } from "../GitHub/AuthProvider.ts";
 import { HetznerAuth } from "../Hetzner/AuthProvider.ts";
 import { InfisicalAuth } from "../Infisical/AuthProvider.ts";
+import { InngestAuth } from "../Inngest/AuthProvider.ts";
 import { NeonAuth } from "../Neon/AuthProvider.ts";
 import { PlanetscaleAuth } from "../Planetscale/AuthProvider.ts";
 import { PrismaAuth } from "../Prisma/AuthProvider.ts";
@@ -342,6 +343,7 @@ const builtinAuth = Layer.mergeAll(
   DopplerAuth,
   HetznerAuth,
   InfisicalAuth,
+  InngestAuth,
   NeonAuth,
   PlanetscaleAuth,
   PrismaAuth,

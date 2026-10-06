@@ -8,6 +8,7 @@ allowBuilds:
   "@parcel/watcher": true
   core-js: false
   es5-ext: false
+  protobufjs: false
   esbuild: true
   sharp: true
   vue-demi: false
