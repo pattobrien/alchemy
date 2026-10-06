@@ -493,6 +493,7 @@
     "foldkit": "catalog:",
     "hono": "catalog:",
     "inngest": "^4.21.1",
+    "inngest-cli": "catalog:",
     "iovalkey": "catalog:",
     "isbot": "catalog:",
     "mongodb": "catalog:",

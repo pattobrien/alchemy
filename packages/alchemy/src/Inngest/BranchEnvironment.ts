@@ -40,7 +40,7 @@ export type BranchEnvironment = Resource<
  * signing and event keys of the `branch` parent. This resource owns the name
  * and archives the environment on destroy, rather than waiting for Inngest's
  * three-day inactivity archive. Archiving the environment also archives its
- * apps. Pass the name to `Inngest.Sync` as `environment` so each deploy
+ * apps. Pass the name to `Inngest.App` as `environment` so each deploy
  * unarchives the environment, since syncing alone does not.
  *
  * Credentials must reach branch environments, so configure the Inngest
@@ -61,7 +61,8 @@ export type BranchEnvironment = Resource<
  *   },
  * });
  *
- * yield* Inngest.Sync({
+ * yield* Inngest.App("app", {
+ *   main: "./src/inngest.ts",
  *   url: Output.interpolate`${worker.url}/api/inngest`,
  *   version: worker.hash,
  *   environment: env.name,

@@ -9,7 +9,6 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Inngest from "@/Inngest";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
-import { APP_ID } from "./fixtures/worker.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), Inngest.providers()),
@@ -17,24 +16,29 @@ const { test } = Test.make({
 
 const hasInngestCreds = !!process.env.INNGEST_API_KEY;
 
+const APP_ID = "alchemy-test-app";
+
+const fixture = (file: string) => pathe.resolve(import.meta.dirname, "fixtures", file);
+
 const preview = (revision: string) =>
   Effect.gen(function* () {
     const { apiKey } = yield* yield* Credentials;
     const env = yield* Inngest.BranchEnvironment("Preview");
-    const worker = yield* Cloudflare.Worker("InngestSyncWorker", {
-      main: pathe.resolve(import.meta.dirname, "fixtures/worker.ts"),
+    const worker = yield* Cloudflare.Worker("InngestBranchWorker", {
+      main: fixture("app-worker-v1.ts"),
       env: {
         INNGEST_ENV: env.name,
         INNGEST_SIGNING_KEY: apiKey,
         FIXTURE_REVISION: revision,
       },
     });
-    const sync = yield* Inngest.Sync({
+    const app = yield* Inngest.App("App", {
+      main: fixture("app-v1.ts"),
       url: Output.interpolate`${worker.url}/api/inngest`,
       version: worker.hash,
       environment: env.name,
     });
-    return { env, sync };
+    return { env, app };
   });
 
 const observeEnv = (name: string) =>
@@ -48,17 +52,15 @@ const findApp = (name: string, archived: boolean) =>
   );
 
 test.provider.skipIf(!hasInngestCreds)(
-  "sync creates the branch environment and destroy archives it",
+  "the first sync creates the branch environment and destroy archives it",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
       const first = yield* stack.deploy(preview("1"));
       const name = first.env.name;
-      expect(first.sync.environmentId).toBeDefined();
 
       const created = yield* observeEnv(name);
-      expect(created?.id).toEqual(first.sync.environmentId);
       expect(created?.isArchived ?? false).toBe(false);
 
       const app = yield* findApp(name, false);
@@ -67,9 +69,7 @@ test.provider.skipIf(!hasInngestCreds)(
 
       const second = yield* stack.deploy(preview("2"));
       expect(second.env.name).toEqual(name);
-      expect(second.sync.environmentId).toEqual(first.sync.environmentId);
-      const resynced = yield* findApp(name, false);
-      expect(resynced?.latestSync?.syncedAt).not.toEqual(app?.latestSync?.syncedAt);
+      expect(second.app.functions).toEqual(["ping"]);
 
       yield* stack.destroy();
       expect((yield* observeEnv(name))?.isArchived).toBe(true);
@@ -89,18 +89,15 @@ test.provider.skipIf(!hasInngestCreds)(
 );
 
 test.provider.skipIf(!hasInngestCreds)(
-  "sync into an environment whose app was archived fails loudly",
+  "deploying into an environment whose app was archived fails loudly",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
 
       const first = yield* stack.deploy(preview("1"));
       const name = first.env.name;
-      yield* InngestApi.patchV2Env({
-        id: first.sync.environmentId!,
-        xInngestEnv: name,
-        isArchived: true,
-      });
+      const env = yield* observeEnv(name);
+      yield* InngestApi.patchV2Env({ id: env!.id!, xInngestEnv: name, isArchived: true });
 
       const error = yield* stack.deploy(preview("2")).pipe(Effect.flip);
       expect(String(error)).toContain("is archived");

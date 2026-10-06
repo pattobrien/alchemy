@@ -1,6 +1,7 @@
 onlyBuiltDependencies:
   - "@parcel/watcher"
   - esbuild
+  - inngest-cli
   - sharp
   - workerd
 
@@ -10,6 +11,7 @@ allowBuilds:
   es5-ext: false
   protobufjs: false
   esbuild: true
+  inngest-cli: true
   sharp: true
   vue-demi: false
   workerd: true
@@ -152,6 +154,7 @@ catalog:
   hono: "^4.12.14"
   http-cache-semantics: "^4.2.0"
   husky: "^9.1.7"
+  inngest-cli: "1.45.1"
   iovalkey: "^0.3.3"
   isbot: "^5.2.1"
   itty-time: "^2.0.2"
