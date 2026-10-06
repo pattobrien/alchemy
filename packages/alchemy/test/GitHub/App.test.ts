@@ -103,6 +103,15 @@ const expectQuietDestroy = (stack: Test.ScratchStack) =>
 const unattended = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   effect.pipe(Effect.provide(Interaction.layerNonInteractive()));
 
+// A registration opens only the local manifest page; a rate-limited attempt
+// reopens it.
+const expectManifestPagesOnly = (launched: ReadonlyArray<string>) => {
+  expect(launched.length).toBeGreaterThanOrEqual(1);
+  for (const url of launched) {
+    expect(new URL(url).hostname).toMatch(/^(127\.0\.0\.1|localhost)$/);
+  }
+};
+
 const identity = (stack: Test.ScratchStack) => ({
   name: stack.name,
   stage: stack.stage,
@@ -418,7 +427,7 @@ test.provider(
       expect(app.events).toEqual([]);
       expect(Redacted.isRedacted(app.clientSecret)).toBe(true);
       expect(Redacted.isRedacted(app.privateKey)).toBe(true);
-      expect(human.launched).toHaveLength(1);
+      expectManifestPagesOnly(human.launched);
 
       // The returned private key authenticates as the app.
       const { data: live } = yield* Effect.tryPromise(() =>
@@ -819,7 +828,7 @@ test.provider(
         repaired.resources["App"]?.attr;
       expect(recreated.appId).not.toBe(app.appId);
       expect(recreated.slug).toBe(props.name);
-      expect(human.launched).toHaveLength(1);
+      expectManifestPagesOnly(human.launched);
       const { data: live } = yield* Effect.tryPromise(() =>
         appOctokit(
           recreated.appId,
@@ -915,7 +924,7 @@ test.provider(
       const app = yield* human
         .run(stack.deploy(deployApp(props)))
         .pipe(withManualStepTimeout("2 minutes"));
-      expect(human.launched).toHaveLength(1);
+      expectManifestPagesOnly(human.launched);
       expect(app.slug).toBe(props.name);
       expect(app.owner).not.toBe(owner);
       expect(app.htmlUrl).toBe(`https://github.com/apps/${props.name}`);
