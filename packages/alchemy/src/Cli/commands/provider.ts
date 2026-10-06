@@ -7,6 +7,7 @@ import { awsCommand } from "./aws.ts";
 import { cloudflareCommand } from "./cloudflare.ts";
 import { setExitCode } from "./errors.ts";
 import { config, envFile, profile } from "./flags.ts";
+import { githubCommand } from "./github.ts";
 import { instrumentCommand } from "./instrument.ts";
 
 /** Optional repeatable filter for checking a subset of registered providers. */
@@ -57,5 +58,5 @@ const checkEnvCommand = Command.make(
 
 export const providerCommand = Command.make("provider", {}).pipe(
   Command.withDescription("Manage cloud provider prerequisites and utilities"),
-  Command.withSubcommands([checkEnvCommand, awsCommand, cloudflareCommand]),
+  Command.withSubcommands([checkEnvCommand, awsCommand, cloudflareCommand, githubCommand]),
 );
