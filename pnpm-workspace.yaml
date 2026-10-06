@@ -154,6 +154,7 @@ catalog:
   hono: "^4.12.14"
   http-cache-semantics: "^4.2.0"
   husky: "^9.1.7"
+  inngest: "^4.21.1"
   inngest-cli: "1.45.1"
   iovalkey: "^0.3.3"
   isbot: "^5.2.1"

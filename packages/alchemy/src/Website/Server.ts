@@ -1,4 +1,3 @@
-import * as NodeNet from "node:net";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
@@ -10,7 +9,7 @@ import * as LocalProvider from "../Local/LocalProvider.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { initialCwd, moduleExtension } from "../Util/Node.ts";
+import { initialCwd, isPortFree, moduleExtension } from "../Util/Node.ts";
 import { sha256Object } from "../Util/sha256.ts";
 
 /**
@@ -418,22 +417,6 @@ export const ServerProviderLive = () =>
       };
     }),
   );
-
-/**
- * Try to bind `port` on `host`; resolves `true` when the port is free.
- * The listener is closed immediately — the port is only observed
- * available, not reserved, so the caller should bind promptly and the
- * framework still handles the (tiny) race window itself.
- */
-const isPortFree = (port: number, host: string) =>
-  Effect.callback<boolean>((resume) => {
-    const server = NodeNet.createServer();
-    server.unref();
-    server.once("error", () => resume(Effect.succeed(false)));
-    server.listen(port, host, () => {
-      server.close(() => resume(Effect.succeed(true)));
-    });
-  });
 
 /**
  * Resolve the dev server's port from the `dev` props: probe the preferred

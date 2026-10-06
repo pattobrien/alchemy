@@ -1,6 +1,7 @@
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import * as Path from "effect/Path";
 import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schedule from "effect/Schedule";
@@ -12,7 +13,7 @@ import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { Stage } from "../Stage.ts";
-import { findAvailablePort, moduleExtension } from "../Util/Node.ts";
+import { findAvailablePort, isPortFree, moduleExtension } from "../Util/Node.ts";
 import type { Providers } from "./Providers.ts";
 
 export const DEFAULT_DEV_SERVER_PORT = 8288;
@@ -25,9 +26,8 @@ export interface DevServerProps {
    */
   port?: number;
   /**
-   * Executable that runs the Inngest CLI. Install the `inngest-cli` package
-   * as a dev dependency so it is on `PATH` when you run `alchemy dev`.
-   * @default "inngest-cli"
+   * Executable that runs the Inngest CLI, used verbatim. When omitted, the
+   * `inngest` binary of the installed `inngest-cli` package is used.
    */
   command?: string;
 }
@@ -60,6 +60,11 @@ export class DevServerCommandNotFound extends Data.TaggedError("Inngest.DevServe
   cause?: unknown;
 }> {}
 
+export class DevServerPortInUse extends Data.TaggedError("Inngest.DevServerPortInUse")<{
+  port: number;
+  message: string;
+}> {}
+
 export class DevServerExited extends Data.TaggedError("Inngest.DevServerExited")<{
   command: string;
   port: number;
@@ -84,13 +89,16 @@ class DevServerNotReady extends Data.TaggedError("Inngest.DevServerNotReady")<{
  * `inngestDev` is `"0"`, so the deployed host talks to Inngest Cloud. The
  * same stack serves both modes.
  *
- * The Dev Server is launched with `inngest-cli`. Add the `inngest-cli`
- * package to your dev dependencies, or set `command` to the executable.
+ * The Dev Server runs the binary shipped by the `inngest-cli` package, so
+ * add `inngest-cli` to your dev dependencies, or set `command` to another
+ * executable. Starting fails when `port` is already in use.
  * @see https://www.inngest.com/docs/dev-server
  *
  * ### Local development
  * **Example:** Worker and app synced into the Dev Server
  * ```typescript
+ * import { functions, inngest } from "./src/inngest.ts";
+ *
  * const devServer = yield* Inngest.DevServer("inngest");
  * const worker = yield* Cloudflare.Worker("api", {
  *   main: "./src/worker.ts",
@@ -98,7 +106,8 @@ class DevServerNotReady extends Data.TaggedError("Inngest.DevServerNotReady")<{
  * });
  *
  * yield* Inngest.App("app", {
- *   main: "./src/inngest.ts",
+ *   client: inngest,
+ *   functions,
  *   url: Output.interpolate`${worker.url}/api/inngest`,
  *   version: worker.hash,
  *   devServer: devServer.url,
@@ -140,7 +149,28 @@ export const DevServerProviderLocal = () =>
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const client = yield* HttpClient.HttpClient;
       const stage = yield* Stage;
+      const path = yield* Path.Path;
       const openDevLog = yield* makeDevLogOpener;
+
+      const notInstalled = (cause: unknown) =>
+        new DevServerCommandNotFound({
+          command: "inngest-cli",
+          message:
+            "Could not resolve the 'inngest-cli' package. Add 'inngest-cli' to your dev dependencies, or set Inngest.DevServer's 'command' to its executable path.",
+          cause,
+        });
+
+      const resolveCommand = Effect.fn(function* (command: string | undefined) {
+        if (command !== undefined) return command;
+        const packageJsonUrl = yield* Effect.try({
+          try: () => new URL(import.meta.resolve("inngest-cli/package.json")),
+          catch: notInstalled,
+        });
+        const packageJsonPath = yield* path
+          .fromFileUrl(packageJsonUrl)
+          .pipe(Effect.mapError(notInstalled));
+        return path.join(path.dirname(packageJsonPath), "bin", "inngest");
+      });
 
       const awaitHealthy = (url: string) =>
         client.get(`${url}/health`).pipe(
@@ -153,8 +183,18 @@ export const DevServerProviderLocal = () =>
 
       return {
         start: Effect.fn(function* ({ fqn, news, invalidate }) {
-          const command = news.command ?? "inngest-cli";
           const port = news.port ?? DEFAULT_DEV_SERVER_PORT;
+          const [wildcardFree, loopbackFree] = yield* Effect.all([
+            isPortFree(port, "0.0.0.0"),
+            isPortFree(port, "127.0.0.1"),
+          ]);
+          if (!(wildcardFree && loopbackFree)) {
+            return yield* new DevServerPortInUse({
+              port,
+              message: `Port ${port} is already in use, so the Inngest Dev Server cannot listen on it. Stop the process using port ${port}, or set Inngest.DevServer's 'port' to a free port.`,
+            });
+          }
+          const command = yield* resolveCommand(news.command);
           yield* spawner.string(ChildProcess.make(command, ["version"])).pipe(
             Effect.timeout("10 seconds"),
             Effect.mapError(
@@ -182,7 +222,6 @@ export const DevServerProviderLocal = () =>
               [
                 "dev",
                 "--no-discovery",
-                "--no-poll",
                 "--port",
                 String(port),
                 "--connect-gateway-port",

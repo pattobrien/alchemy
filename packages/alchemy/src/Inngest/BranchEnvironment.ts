@@ -50,6 +50,8 @@ export type BranchEnvironment = Resource<
  * ### Preview deploys
  * **Example:** Branch environment per pull request stage
  * ```typescript
+ * import { inngest, functions } from "./src/inngest.ts";
+ *
  * const env = yield* Inngest.BranchEnvironment("preview");
  *
  * const worker = yield* Cloudflare.Worker("api", {
@@ -62,7 +64,8 @@ export type BranchEnvironment = Resource<
  * });
  *
  * yield* Inngest.App("app", {
- *   main: "./src/inngest.ts",
+ *   client: inngest,
+ *   functions,
  *   url: Output.interpolate`${worker.url}/api/inngest`,
  *   version: worker.hash,
  *   environment: env.name,
@@ -102,7 +105,8 @@ export const BranchEnvironmentProvider = () =>
         }),
         read: Effect.fn(function* ({ id, olds, output }) {
           const name = output?.name ?? (yield* resolveName(id, olds));
-          return (yield* api.observe(name)) === undefined ? undefined : { name };
+          const observed = yield* api.observe(name);
+          return observed === undefined || observed.isArchived ? undefined : { name };
         }),
       };
     }),

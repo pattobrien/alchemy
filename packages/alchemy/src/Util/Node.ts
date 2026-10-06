@@ -115,3 +115,20 @@ export const findAvailablePort = (host = "127.0.0.1") =>
       });
     });
   });
+
+/**
+ * Try to bind `port` on `host`; resolves `true` when the port is free.
+ *
+ * The listener is closed immediately, so the port is only observed
+ * available, not reserved. The caller should bind promptly and still handle
+ * the race window.
+ */
+export const isPortFree = (port: number, host: string) =>
+  Effect.callback<boolean>((resume) => {
+    const server = NodeNet.createServer();
+    server.unref();
+    server.once("error", () => resume(Effect.succeed(false)));
+    server.listen(port, host, () => {
+      server.close(() => resume(Effect.succeed(true)));
+    });
+  });

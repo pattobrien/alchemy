@@ -504,6 +504,9 @@ catalogs:
     husky:
       specifier: ^9.1.7
       version: 9.1.7
+    inngest:
+      specifier: ^4.21.1
+      version: 4.21.1
     inngest-cli:
       specifier: 1.45.1
       version: 1.45.1
@@ -7229,7 +7232,7 @@ importers:
         specifier: 'catalog:'
         version: 4.12.33
       inngest:
-        specifier: ^4.21.1
+        specifier: 'catalog:'
         version: 4.21.1(@opentelemetry/core@2.11.0(@opentelemetry/api@1.9.1))(@sveltejs/kit@3.0.0-next.27(@opentelemetry/api@1.9.1)(@sveltejs/vite-plugin-svelte@7.2.0(svelte@5.56.8)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))(svelte@5.56.8)(typescript@7.0.2)(vite@8.2.1(@types/node@26.2.0)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.50.0)(tsx@4.23.12)(yaml@2.9.0)))(express@5.2.1(supports-color@10.2.2))(h3@1.15.11)(hono@4.12.33)(next@16.2.10(@babel/core@7.29.7(supports-color@10.2.2))(@opentelemetry/api@1.9.1)(@playwright/test@1.62.0)(react-dom@19.3.0(react@19.3.0))(react@19.3.0))(react@19.3.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.5.4)
       inngest-cli:
         specifier: 'catalog:'

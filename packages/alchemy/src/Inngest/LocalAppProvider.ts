@@ -3,13 +3,14 @@ import { Credentials } from "@distilled.cloud/inngest/Credentials";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
+import type { HttpClientError } from "effect/http/HttpClientError";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
-import { AppFunctionsOutOfSync, AppResource, AppSyncFailed, isFailureHandler } from "./App.ts";
+import { AppResource, AppSyncFailed, compareFunctions, expectedFunctionSlugs } from "./App.ts";
 import { DEFAULT_DEV_SERVER_PORT } from "./DevServer.ts";
 
 export class AppHostUnreachable extends Data.TaggedError("Inngest.AppHostUnreachable")<{
@@ -25,6 +26,9 @@ export class AppRemoveFailed extends Data.TaggedError("Inngest.AppRemoveFailed")
 }> {}
 
 const DEFAULT_DEV_SERVER = `http://localhost:${DEFAULT_DEV_SERVER_PORT}`;
+
+const transportErrorAsMissing = (error: HttpClientError) =>
+  error.reason._tag === "TransportError" ? Effect.succeed(undefined) : Effect.fail(error);
 
 const devServerCredentials = (devServer: string) =>
   Effect.provideService(
@@ -69,29 +73,20 @@ export const LocalAppProvider = () =>
         }),
       );
 
-      const verifyFunctions = Effect.fn(function* (
-        devServer: string,
-        appId: string,
-        expected: string[],
-      ) {
-        const reported = yield* Inngest.getV2Functions.items({ appId }).pipe(
+      const observeFunctions = (devServer: string, appId: string) =>
+        Inngest.getV2Functions.items({ appId }).pipe(
           Stream.map((fn) => fn.slug),
+          Stream.filter((slug): slug is string => slug !== undefined),
           Stream.runCollect,
+          Effect.map((slugs) => [...slugs].sort()),
           devServerCredentials(devServer),
         );
-        const missing = expected.filter((slug) => !reported.includes(slug));
-        const unexpected = reported.filter(
-          (slug): slug is string => slug !== undefined && !expected.includes(slug),
-        );
-        if (missing.length > 0 || unexpected.length > 0) {
-          return yield* new AppFunctionsOutOfSync({ appId, missing, unexpected });
-        }
-      });
 
       const syncFunctions = Effect.fn(
         function* (devServer: string, appId: string, url: string, expected: string[]) {
           yield* register(appId, url);
-          yield* verifyFunctions(devServer, appId, expected);
+          const reported = yield* observeFunctions(devServer, appId);
+          return yield* compareFunctions(appId, expected, reported);
         },
         Effect.retry({
           while: (e) => e._tag === "Inngest.AppFunctionsOutOfSync",
@@ -136,28 +131,37 @@ export const LocalAppProvider = () =>
         reconcile: Effect.fn(function* ({ news, bindings }) {
           const { appId, url, environment } = news;
           const devServer = news.devServer ?? DEFAULT_DEV_SERVER;
-          const functions = bindings
-            .filter((binding) => !isFailureHandler(binding.data))
-            .map((binding) => binding.sid)
-            .sort();
-          yield* syncFunctions(devServer, appId, url, functions);
+          const functions = yield* syncFunctions(
+            devServer,
+            appId,
+            url,
+            expectedFunctionSlugs(bindings),
+          );
           return { appId, url, environment, functions };
         }),
         delete: Effect.fn(function* ({ olds, output }) {
           yield* unregister(olds.devServer ?? DEFAULT_DEV_SERVER, output.url);
         }),
         read: Effect.fn(function* ({ olds, output }) {
-          if (output === undefined) return undefined;
-          const app = yield* Inngest.getV2App({ appId: output.appId }).pipe(
-            devServerCredentials(olds.devServer ?? DEFAULT_DEV_SERVER),
+          const appId = output?.appId ?? olds.appId;
+          const devServer = olds.devServer ?? DEFAULT_DEV_SERVER;
+          const observed = yield* Inngest.getV2App({ appId }).pipe(
+            devServerCredentials(devServer),
+            Effect.map((res) => res.data),
             Effect.catchTag("AppNotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("HttpClientError", (error) =>
-              error.reason._tag === "TransportError"
-                ? Effect.succeed(undefined)
-                : Effect.fail(error),
-            ),
+            Effect.catchTag("HttpClientError", transportErrorAsMissing),
           );
-          return app?.data === undefined ? undefined : output;
+          if (observed === undefined) return undefined;
+          const functions = yield* observeFunctions(devServer, appId).pipe(
+            Effect.catchTag("HttpClientError", transportErrorAsMissing),
+          );
+          if (functions === undefined) return undefined;
+          return {
+            appId,
+            url: observed.latestSync?.url ?? output?.url ?? olds.url,
+            environment: output?.environment ?? olds.environment,
+            functions,
+          };
         }),
       };
     }),

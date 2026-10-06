@@ -9,6 +9,7 @@ import * as Cloudflare from "@/Cloudflare";
 import * as Inngest from "@/Inngest";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
+import { functions, inngest } from "./fixtures/app-v1.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), Inngest.providers()),
@@ -33,7 +34,8 @@ const preview = (revision: string) =>
       },
     });
     const app = yield* Inngest.App("App", {
-      main: fixture("app-v1.ts"),
+      client: inngest,
+      functions,
       url: Output.interpolate`${worker.url}/api/inngest`,
       version: worker.hash,
       environment: env.name,

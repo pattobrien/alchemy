@@ -492,7 +492,7 @@
     "effect": "catalog:",
     "foldkit": "catalog:",
     "hono": "catalog:",
-    "inngest": "^4.21.1",
+    "inngest": "catalog:",
     "inngest-cli": "catalog:",
     "iovalkey": "catalog:",
     "isbot": "catalog:",
@@ -535,6 +535,8 @@
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
+    "inngest": "catalog:",
+    "inngest-cli": "catalog:",
     "mongodb": "catalog:",
     "mysql2": "catalog:",
     "pg": "catalog:",
@@ -577,6 +579,12 @@
       "optional": true
     },
     "drizzle-orm": {
+      "optional": true
+    },
+    "inngest": {
+      "optional": true
+    },
+    "inngest-cli": {
       "optional": true
     },
     "mongodb": {

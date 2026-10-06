@@ -8,7 +8,12 @@ const ping = inngest.createFunction(
 );
 
 const pong = inngest.createFunction(
-  { id: "pong", triggers: [{ event: "alchemy/test.pong" }], concurrency: 2 },
+  {
+    id: "pong",
+    triggers: [{ event: "alchemy/test.pong" }],
+    concurrency: 2,
+    onFailure: async () => {},
+  },
   async () => "ping",
 );
 
