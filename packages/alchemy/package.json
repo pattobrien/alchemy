@@ -54,6 +54,7 @@
     "./Infisical": "./src/Infisical/index.ts",
     "./Inngest": "./src/Inngest/index.ts",
     "./Kubernetes": "./src/Kubernetes/index.ts",
+    "./Linear": "./src/Linear/index.ts",
     "./Cli": "./src/Cli/index.ts",
     "./Cli/CliKit": "./src/Cli/CliKit/index.ts",
     "./Cloudflare": "./src/Cloudflare/index.ts",
@@ -212,6 +213,11 @@
         "types": "./lib/Kubernetes/index.d.ts",
         "bun": "./src/Kubernetes/index.ts",
         "default": "./lib/Kubernetes/index.js"
+      },
+      "./Linear": {
+        "types": "./lib/Linear/index.d.ts",
+        "bun": "./src/Linear/index.ts",
+        "default": "./lib/Linear/index.js"
       },
       "./Cli": {
         "types": "./lib/Cli/index.d.ts",
@@ -427,6 +433,7 @@
     "@distilled.cloud/iceberg": "workspace:*",
     "@distilled.cloud/infisical": "workspace:*",
     "@distilled.cloud/inngest": "workspace:*",
+    "@distilled.cloud/linear": "workspace:*",
     "@distilled.cloud/neon": "workspace:*",
     "@distilled.cloud/planetscale": "workspace:*",
     "@distilled.cloud/prisma": "workspace:*",

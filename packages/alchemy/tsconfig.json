@@ -19,6 +19,7 @@
     { "path": "../../submodules/distilled/packages/doppler/tsconfig.json" },
     { "path": "../../submodules/distilled/packages/infisical/tsconfig.json" },
     { "path": "../../submodules/distilled/packages/inngest/tsconfig.json" },
+    { "path": "../../submodules/distilled/packages/linear/tsconfig.json" },
     {
       "path": "../floci/tsconfig.json"
     },

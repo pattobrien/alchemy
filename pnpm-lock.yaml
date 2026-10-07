@@ -7028,6 +7028,9 @@ importers:
       '@distilled.cloud/inngest':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/inngest
+      '@distilled.cloud/linear':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/linear
       '@distilled.cloud/neon':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/neon
