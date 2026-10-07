@@ -167,8 +167,6 @@ export const Stack: Context.ServiceClass<Stack, "Stack", Omit<StackSpec, "output
         options: StackProps<NoInfer<Req>>,
         effect: Effect.Effect<A, ConfigError, Req>,
       ) => Effect.Effect<CompiledStack<A>, ConfigError> & ConfiguredStackMeta<NoInfer<Req>>;
-      // a Stack that declares its stages gets a key per stage, so indexing it
-      // stays defined under noUncheckedIndexedAccess
       stage: {
         readonly [S in Stages]: Effect.Effect<Self>;
       };

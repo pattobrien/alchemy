@@ -459,8 +459,6 @@ export const RulesetProvider = () =>
       return attrsOf(observed);
     }),
 
-    // With state, read by the stored id. Without it, find the repository's ruleset by name and
-    // target so `--adopt` takes over an existing one instead of creating a duplicate.
     read: Effect.fn(function* ({ olds, output }) {
       if (output !== undefined) {
         const observed = yield* getRuleset(olds, output.rulesetId);
