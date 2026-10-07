@@ -5,6 +5,7 @@ import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
 import * as Scope from "effect/Scope";
 import type { BrowserContext, Page } from "playwright-core";
 import { UserFacingError } from "./UserFacingError.ts";
@@ -33,6 +34,13 @@ export class BrowserAutomationFailed extends Data.TaggedError("BrowserAutomation
 
 export type BrowserError = BrowserUnavailable | BrowserAutomationFailed;
 
+export interface BrowserProxy {
+  /** Proxy URL, e.g. `http://proxy.example.com:3128` or `socks5://host:1080`. */
+  readonly server: string;
+  readonly username?: string;
+  readonly password?: Redacted.Redacted<string>;
+}
+
 export interface BrowserOptions {
   readonly profileDir: string;
   /** @default true */
@@ -41,7 +49,11 @@ export interface BrowserOptions {
   readonly channel?: "chrome" | "chromium" | "msedge";
   /** @default 30 seconds */
   readonly defaultTimeout?: Duration.Input;
+  /** Route every page through this proxy. */
+  readonly proxy?: BrowserProxy;
 }
+
+const LAUNCH_ARGS = ["--disable-blink-features=AutomationControlled"];
 
 export class Browser extends Context.Service<
   Browser,
@@ -101,6 +113,19 @@ const launchContext = (
           playwright.chromium.launchPersistentContext(options.profileDir, {
             channel,
             headless,
+            viewport: null,
+            args: LAUNCH_ARGS,
+            proxy:
+              options.proxy === undefined
+                ? undefined
+                : {
+                    server: options.proxy.server,
+                    username: options.proxy.username,
+                    password:
+                      options.proxy.password === undefined
+                        ? undefined
+                        : Redacted.value(options.proxy.password),
+                  },
           }),
         catch: (cause) => launchFailure(channel, cause),
       }),

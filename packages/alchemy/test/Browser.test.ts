@@ -42,3 +42,32 @@ describe("Browser.layer", { tags: ["unit", "local"] }, () => {
     );
   });
 });
+
+describe(
+  "Browser.layer launch options",
+  { tags: ["browser", "local"], optInTags: ["browser"] },
+  () => {
+    layer(NodeServices.layer, { excludeTestServices: true })((it) => {
+      it.effect(
+        "hides the automation flag and leaves the viewport to the window",
+        () =>
+          Effect.gen(function* () {
+            const fs = yield* FileSystem.FileSystem;
+            const path = yield* Path.Path;
+            const root = yield* fs.makeTempDirectory({ prefix: "alchemy-browser-test-" });
+            const profileDir = path.join(root, "profile");
+            const observed = yield* Browser.Browser.use((browser) =>
+              browser.withPage("about:blank", async (page) => ({
+                webdriver: await page.evaluate(() => navigator.webdriver),
+                viewport: page.viewportSize(),
+              })),
+            ).pipe(Effect.provide(Browser.layer({ profileDir })));
+            expect(observed.webdriver).toBe(false);
+            expect(observed.viewport).toBeNull();
+            yield* fs.remove(root, { recursive: true });
+          }),
+        { timeout: 60_000 },
+      );
+    });
+  },
+);
