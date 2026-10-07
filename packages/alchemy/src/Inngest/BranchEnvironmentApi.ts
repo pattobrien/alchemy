@@ -14,7 +14,7 @@ export const makeBranchEnvironmentApi = Effect.gen(function* () {
       Stream.filter((env) => env.name === name),
       Stream.runHead,
       Effect.map(Option.getOrUndefined),
-      Effect.catchTag("EnvironmentUnauthorized", () => verifyCredentials),
+      Effect.catchTag("Unauthorized", () => verifyCredentials),
     );
   });
 
