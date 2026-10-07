@@ -10,22 +10,27 @@ import { BranchEnvironment, BranchEnvironmentProvider } from "./BranchEnvironmen
 import * as Credentials from "./Credentials.ts";
 import { DevServer, DevServerProvider } from "./DevServer.ts";
 import { LocalAppProvider } from "./LocalAppProvider.ts";
+import { Webhook, WebhookProvider } from "./Webhook.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()("Inngest") {}
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
 /**
- * Inngest providers and credentials. Wires up the App, BranchEnvironment and
- * DevServer resources and registers the Inngest AuthProvider so
+ * Inngest providers and credentials. Wires up the App, BranchEnvironment,
+ * DevServer and Webhook resources and registers the Inngest AuthProvider so
  * `alchemy profile edit` can configure it.
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([AppResource, BranchEnvironment, DevServer])).pipe(
+  Layer.effect(
+    Providers,
+    Provider.collection([AppResource, BranchEnvironment, DevServer, Webhook]),
+  ).pipe(
     Layer.provide([
       ProviderLayer.dual(AppResource, { live: AppProvider, local: LocalAppProvider }),
       BranchEnvironmentProvider(),
       DevServerProvider(),
+      WebhookProvider(),
     ]),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(FetchHttpClient.layer),
