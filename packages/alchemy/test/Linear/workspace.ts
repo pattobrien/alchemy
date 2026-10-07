@@ -1,5 +1,11 @@
 import { Query } from "@distilled.cloud/core/query";
-import { Linear, type WorkflowStateFilter } from "@distilled.cloud/linear";
+import {
+  Linear,
+  type CustomViewCreateInput,
+  type IssueLabelCreateInput,
+  type WebhookCreateInput,
+  type WorkflowStateFilter,
+} from "@distilled.cloud/linear";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
@@ -88,3 +94,66 @@ export const template = Effect.fn("template")(function* (id: string) {
 });
 
 export const deleteTemplate = Query.fn((id: string) => Linear.templateDelete({ id }).success);
+
+export const notFound = (entity: string) => ({
+  _tag: "LinearNotFound",
+  message: `Entity not found: ${entity}`,
+});
+
+export const issueLabel = Query.fn((id: string) =>
+  Linear.issueLabel({ id }).pipe(
+    Query.map((l) => ({
+      name: l.name,
+      color: l.color,
+      description: l.description,
+      isGroup: l.isGroup,
+      parentId: l.parent.id,
+      teamId: l.team.id,
+    })),
+  ),
+);
+
+export const createLabel = Query.fn(
+  (input: IssueLabelCreateInput) => Linear.issueLabelCreate({ input }).issueLabel.id,
+);
+
+export const deleteLabel = Query.fn((id: string) => Linear.issueLabelDelete({ id }).success);
+
+export const customView = Query.fn((id: string) =>
+  Linear.customView({ id }).pipe(
+    Query.map((v) => ({
+      name: v.name,
+      teamId: v.team.id,
+      shared: v.shared,
+      filterData: v.filterData,
+    })),
+  ),
+);
+
+export const createView = Query.fn(
+  (input: CustomViewCreateInput) => Linear.customViewCreate({ input }).customView.id,
+);
+
+export const deleteView = Query.fn((id: string) => Linear.customViewDelete({ id }).success);
+
+export const hookUrl = (path: string) => `https://alc.example.com/${path}`;
+
+export const webhook = Query.fn((id: string) =>
+  Linear.webhook({ id }).pipe(
+    Query.map((h) => ({
+      url: h.url,
+      label: h.label,
+      enabled: h.enabled,
+      secret: h.secret,
+      resourceTypes: h.resourceTypes,
+      teamId: h.team.id,
+      allPublicTeams: h.allPublicTeams,
+    })),
+  ),
+);
+
+export const createWebhook = Query.fn(
+  (input: WebhookCreateInput) => Linear.webhookCreate({ input }).webhook.id,
+);
+
+export const deleteWebhook = Query.fn((id: string) => Linear.webhookDelete({ id }).success);

@@ -6,10 +6,15 @@ import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Provider from "../Provider.ts";
 import { LinearAuth } from "./AuthProvider.ts";
 import * as Credentials from "./Credentials.ts";
+import { CustomView, CustomViewProvider } from "./CustomView.ts";
+import { IssueLabel, IssueLabelProvider } from "./IssueLabel.ts";
 import { Team, TeamProvider } from "./Team.ts";
 import { TeamDefaults, TeamDefaultsProvider } from "./TeamDefaults.ts";
+import { TeamLabel, TeamLabelProvider } from "./TeamLabel.ts";
 import { Template, TemplateProvider } from "./Template.ts";
+import { Webhook, WebhookProvider } from "./Webhook.ts";
 import { WorkflowState, WorkflowStateProvider } from "./WorkflowState.ts";
+import { WorkspaceLabel, WorkspaceLabelProvider } from "./WorkspaceLabel.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()("Linear") {}
 
@@ -17,17 +22,36 @@ export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
 /**
  * Linear providers and credentials. Wires up the Team, TeamDefaults,
- * WorkflowState and Template resources and registers the Linear AuthProvider
+ * WorkflowState, Template, IssueLabel, TeamLabel, WorkspaceLabel, CustomView
+ * and Webhook resources and registers the Linear AuthProvider
  * so `alchemy profile edit` can configure it. Credentials come from
  * `LINEAR_API_KEY` when it is set, otherwise from the selected profile.
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([Team, TeamDefaults, WorkflowState, Template])).pipe(
+  Layer.effect(
+    Providers,
+    Provider.collection([
+      Team,
+      TeamDefaults,
+      WorkflowState,
+      Template,
+      IssueLabel,
+      TeamLabel,
+      WorkspaceLabel,
+      CustomView,
+      Webhook,
+    ]),
+  ).pipe(
     Layer.provide([
       TeamProvider(),
       TeamDefaultsProvider(),
       WorkflowStateProvider(),
       TemplateProvider(),
+      IssueLabelProvider(),
+      TeamLabelProvider(),
+      WorkspaceLabelProvider(),
+      CustomViewProvider(),
+      WebhookProvider(),
     ]),
     Layer.provideMerge(GraphQLLive),
     Layer.provideMerge(Credentials.fromAuthProvider()),
