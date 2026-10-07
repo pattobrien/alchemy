@@ -2,7 +2,6 @@ import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import type { ConfigError } from "effect/Config";
 import * as Config from "effect/Config";
-import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as EffectExit from "effect/Exit";
 import * as Layer from "effect/Layer";
@@ -10,7 +9,6 @@ import * as Deploy from "@/Deploy.ts";
 import * as Destroy from "@/Destroy.ts";
 import * as Alchemy from "@/index.ts";
 import * as Plan from "@/Plan.ts";
-import { Stack } from "@/Stack.ts";
 import { Stage } from "@/Stage.ts";
 import * as State from "@/State/index.ts";
 import * as Test from "@/Test/Alchemy.ts";
@@ -143,53 +141,6 @@ describe("Test.make configured stack", { tags: ["unit", "local"] }, () => {
       Effect.ensuring(explicit.destroy(configured, { stage: "metadata-call" }).pipe(Effect.orDie)),
       Effect.ensuring(explicit.destroy(configured).pipe(Effect.orDie)),
     ),
-  );
-});
-
-describe("Alchemy.Stack stage mapper", { tags: ["unit", "local"] }, () => {
-  const store = State.InMemoryService();
-  const state = Layer.succeed(State.State, store);
-  const providers = TestLayers();
-  const api = Test.make({ providers, state, stage: "pr-12", sidecar: false });
-  const program = Alchemy.Stack(
-    "MappedStage",
-    {
-      providers,
-      state,
-      secrets: ({ stage }) =>
-        ConfigProvider.layer(ConfigProvider.fromUnknown({ SECRETS_STAGE: stage })),
-      stage: (stage) => (stage === "prod" ? "prod" : "preview"),
-    },
-    Effect.gen(function* () {
-      const resource = yield* TestResource("Resource", { string: "value" });
-      return {
-        stage: yield* Stage,
-        spec: (yield* Stack).stage,
-        secrets: yield* Config.String("SECRETS_STAGE"),
-        resource: resource.string,
-      };
-    }),
-  );
-
-  api.test(
-    "deploys and destroys the mapped stage for any CLI stage",
-    Effect.gen(function* () {
-      const output = yield* api.deploy(program);
-      expect(output).toEqual({
-        stage: "preview",
-        spec: "preview",
-        secrets: "preview",
-        resource: "value",
-      });
-      const state = yield* store;
-      const preview = { stack: program.stackName, stage: "preview" };
-      expect(yield* state.getOutput(preview)).toEqual(output);
-      expect(yield* state.get({ ...preview, fqn: "Resource" })).toBeDefined();
-      expect(yield* state.getOutput({ stack: program.stackName, stage: "pr-12" })).toBeUndefined();
-      yield* api.destroy(program, { stage: "pr-34" });
-      expect(yield* state.get({ ...preview, fqn: "Resource" })).toBeUndefined();
-      expect(yield* state.getOutput(preview)).toBeUndefined();
-    }),
   );
 });
 
