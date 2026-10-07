@@ -15,6 +15,7 @@ export * from "./Diff.ts";
 export * from "./Input.ts";
 export * from "./InstanceId.ts";
 export * from "./KeyPair.ts";
+export * as Linear from "./Linear/index.ts";
 export * from "./Namespace.ts";
 export { stackRef } from "./Output.ts";
 export type { Output } from "./Output.ts";
