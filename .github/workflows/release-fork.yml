@@ -38,11 +38,11 @@ jobs:
         run: pnpm build:pkg
 
       - name: Authenticate to GitHub Packages
-        run: |
-          echo '@pattobrien:registry=https://npm.pkg.github.com' >> .npmrc
-          echo '//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}' >> .npmrc
-
-      - name: Publish to GitHub Packages
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo '@pattobrien:registry=https://npm.pkg.github.com' >> .npmrc
+          pnpm config set //npm.pkg.github.com/:_authToken "$NODE_AUTH_TOKEN"
+
+      - name: Publish to GitHub Packages
         run: node scripts/release/fork-publish.ts "${GITHUB_REF_NAME#v}"
