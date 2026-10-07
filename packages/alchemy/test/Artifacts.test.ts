@@ -1,26 +1,21 @@
-import * as Artifacts from "@/Artifacts";
 import { describe, expect, it } from "alchemy-test";
 import * as Cause from "effect/Cause";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
+import * as Artifacts from "@/Artifacts";
 
 // `Artifacts.cached` parks concurrent callers of the same key on the first
 // caller's computation — e.g. a `Docker.Image` diff running `docker build`
 // once for its own plan pass and once for a consumer resolving its output.
 // Every waiter must learn how that computation ended, or a single failed
 // build hangs the whole plan. Waits are bounded so a regression fails fast.
-const withArtifacts = <A, E>(
-  effect: Effect.Effect<A, E, Artifacts.Artifacts>,
-) =>
+const withArtifacts = <A, E>(effect: Effect.Effect<A, E, Artifacts.Artifacts>) =>
   effect.pipe(
     Effect.provideService(
       Artifacts.Artifacts,
-      Artifacts.makeScopedArtifacts(
-        Artifacts.createArtifactStore(),
-        "Test/Resource",
-      ),
+      Artifacts.makeScopedArtifacts(Artifacts.createArtifactStore(), "Test/Resource"),
     ),
   );
 
@@ -64,9 +59,7 @@ describe("Artifacts.cached", { tags: ["unit", "local"] }, () => {
             ),
           );
           const [a, b] = yield* Effect.all(
-            [build, build].map((call) =>
-              call.pipe(Effect.timeout("2 seconds"), Effect.flip),
-            ),
+            [build, build].map((call) => call.pipe(Effect.timeout("2 seconds"), Effect.flip)),
             { concurrency: "unbounded" },
           );
           expect(a).toBe("docker build failed");
@@ -85,9 +78,7 @@ describe("Artifacts.cached", { tags: ["unit", "local"] }, () => {
           let runs = 0;
           const build = Artifacts.cached("build")(
             Effect.suspend(() =>
-              ++runs === 1
-                ? Effect.fail("docker build failed")
-                : Effect.succeed("image-id"),
+              ++runs === 1 ? Effect.fail("docker build failed") : Effect.succeed("image-id"),
             ),
           );
           const first = yield* Effect.exit(build);
@@ -107,22 +98,16 @@ describe("Artifacts.cached", { tags: ["unit", "local"] }, () => {
         Effect.gen(function* () {
           const started = yield* Deferred.make<void>();
           const build = Artifacts.cached("build")(
-            Deferred.succeed(started, undefined).pipe(
-              Effect.andThen(Effect.never),
-            ),
+            Deferred.succeed(started, undefined).pipe(Effect.andThen(Effect.never)),
           );
           const owner = yield* Effect.forkChild(build);
           yield* Deferred.await(started);
-          const waiter = yield* Effect.forkChild(
-            build.pipe(Effect.timeout("2 seconds")),
-          );
+          const waiter = yield* Effect.forkChild(build.pipe(Effect.timeout("2 seconds")));
           yield* Effect.sleep("10 millis");
           yield* Fiber.interrupt(owner);
           const exit = yield* Fiber.await(waiter);
           // The waiter sees the interruption rather than timing out.
-          expect(
-            Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause),
-          ).toBe(true);
+          expect(Exit.isFailure(exit) && Cause.hasInterruptsOnly(exit.cause)).toBe(true);
         }),
       ),
     { timeout: 5_000, retry: 0 },

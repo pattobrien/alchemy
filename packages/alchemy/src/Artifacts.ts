@@ -141,9 +141,7 @@ export const cached =
         Effect.onExit((exit) =>
           Deferred.done(deferred, exit).pipe(
             Effect.andThen(
-              Exit.isSuccess(exit)
-                ? artifacts.set(id, exit.value)
-                : artifacts.delete(id),
+              Exit.isSuccess(exit) ? artifacts.set(id, exit.value) : artifacts.delete(id),
             ),
           ),
         ),
