@@ -88,7 +88,7 @@ const runDev = Effect.fn(function* (options: DevOptions) {
   const once = yield* devOnce;
   const applyPlan = Stacks.apply(snapshot).pipe(
     renderApply(snapshot.native, {
-      stage: snapshot.stack.stage,
+      stage: options.stage,
       dev: !once,
     }),
   );

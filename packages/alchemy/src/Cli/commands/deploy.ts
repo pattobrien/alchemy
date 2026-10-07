@@ -94,7 +94,7 @@ const detectAndMaybeRepairDrift = Effect.fn(function* (
   if (options.dryRun) {
     yield* cli.displayPlan(snapshot.repairPlan.native, {
       detailed: options.detailed,
-      stage: snapshot.stack.stage,
+      stage: target.stage,
     });
     return true;
   }
@@ -129,7 +129,7 @@ const detectAndMaybeRepairDrift = Effect.fn(function* (
     } else {
       yield* cli.displayPlan(snapshot.repairPlan.native, {
         detailed: options.detailed,
-        stage: snapshot.stack.stage,
+        stage: target.stage,
       });
       yield* CliKit.accessors.output.warning(
         "Drift detected in a non-interactive terminal. Re-run with --yes to repair and deploy.",
@@ -141,7 +141,7 @@ const detectAndMaybeRepairDrift = Effect.fn(function* (
     yield* Drift.repair(snapshot).pipe(
       renderApply(snapshot.repairPlan.native, {
         detailed: options.detailed,
-        stage: snapshot.stack.stage,
+        stage: target.stage,
       }),
     );
   }
@@ -151,6 +151,7 @@ const detectAndMaybeRepairDrift = Effect.fn(function* (
 const runStack = Effect.fn(function* (options: StackCommandOptions) {
   yield* validateSelectionOptions(options);
   const cli = yield* Cli;
+  const display = { detailed: options.detailed, stage: options.stage };
   const target = {
     entrypoint: options.main,
     stage: options.stage,
@@ -181,7 +182,6 @@ const runStack = Effect.fn(function* (options: StackCommandOptions) {
     adopt: options.adopt,
     updateStateStore: options.yes,
   }).pipe(withPlanningProgress);
-  const display = { detailed: options.detailed, stage: snapshot.stack.stage };
 
   if (options.dryRun) {
     return yield* cli.displayPlan(snapshot.native, display);
