@@ -1,5 +1,6 @@
 import { GraphQLLive } from "@distilled.cloud/linear";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
 import * as Layer from "effect/Layer";
 import { CredentialsStoreLive } from "../Auth/Credentials.ts";
 import { ProfileStoreLive } from "../Auth/Profile.ts";
@@ -20,14 +21,41 @@ export class Providers extends Provider.ProviderCollection<Providers>()("Linear"
 
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
+export interface ProvidersOptions {
+  /**
+   * Credentials to act as instead of the AuthProvider's, such as an OAuth
+   * application via {@link Credentials.fromClientCredentials}.
+   */
+  readonly credentials?: Layer.Layer<
+    Credentials.Credentials,
+    never,
+    HttpClient.HttpClient | Layer.Services<ReturnType<typeof Credentials.fromAuthProvider>>
+  >;
+}
+
 /**
  * Linear providers and credentials. Wires up the Team, TeamDefaults,
  * WorkflowState, Template, IssueLabel, TeamLabel, WorkspaceLabel, CustomView
  * and Webhook resources and registers the Linear AuthProvider
  * so `alchemy profile edit` can configure it. Credentials come from
  * `LINEAR_API_KEY` when it is set, otherwise from the selected profile.
+ *
+ * Pass `credentials` to act as something else, such as an OAuth application
+ * via {@link Credentials.fromClientCredentials}:
+ *
+ * ```typescript
+ * providers: Linear.providers({
+ *   credentials: Linear.fromClientCredentials({
+ *     clientId: Config.String("LINEAR_CLIENT_ID"),
+ *     clientSecret: Config.Redacted("LINEAR_CLIENT_SECRET"),
+ *     scopes: ["read", "write"],
+ *   }),
+ * })
+ * ```
  */
-export const providers = () =>
+export const providers = ({
+  credentials = Credentials.fromAuthProvider(),
+}: ProvidersOptions = {}) =>
   Layer.effect(
     Providers,
     Provider.collection([
@@ -54,7 +82,7 @@ export const providers = () =>
       WebhookProvider(),
     ]),
     Layer.provideMerge(GraphQLLive),
-    Layer.provideMerge(Credentials.fromAuthProvider()),
+    Layer.provideMerge(credentials),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.provideMerge(LinearAuth),
     Layer.provideMerge(ProfileStoreLive),
