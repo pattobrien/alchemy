@@ -102,15 +102,20 @@ export const NetworkProvider = () =>
           return owned ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, output, instanceId, news, olds }) {
-          if (!isResolved(news) || !output) return undefined;
-          if (dockerEngineContextName(olds?.context) !== dockerEngineContextName(news?.context)) {
+          const context = news && "context" in news ? news.context : undefined;
+          const props = news && "context" in news ? { ...news, context: undefined } : news;
+          if (!isResolved(props) || !output) return undefined;
+          if (
+            isResolved(context) &&
+            dockerEngineContextName(olds?.context) !== dockerEngineContextName(context)
+          ) {
             return { action: "replace", deleteFirst: true };
           }
-          const args = yield* makeNetworkArgs(id, news, instanceId);
+          const args = yield* makeNetworkArgs(id, props, instanceId);
           // Auto-generated names are engine-owned: the deployed name stays
           // authoritative even if the generator would name this id differently
           // today. Only an explicit user-provided name can force a replace.
-          const desiredName = news?.name ?? output.name;
+          const desiredName = props?.name ?? output.name;
           if (
             output.name !== desiredName ||
             output.driver !== args.driver ||
@@ -119,7 +124,10 @@ export const NetworkProvider = () =>
             // the observed network but must not drive replacement.
             !Equal.equals(stripInternalTags(output.labels), args.label ?? {})
           ) {
-            return { action: "replace", deleteFirst: true };
+            return {
+              action: "replace",
+              deleteFirst: isResolved(context) || props?.name === output.name,
+            };
           }
         }),
         reconcile: Effect.fn(function* ({ output, id, instanceId, news }) {

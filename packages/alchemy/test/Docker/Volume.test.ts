@@ -143,5 +143,43 @@ describe(
         expect(second.labels.generation).toBe("2");
       }),
     );
+
+    test.provider(
+      "replaces a volume whose labels change while its context is re-created",
+      (stack) =>
+        Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          const program = (generation: string) =>
+            Effect.gen(function* () {
+              const context = yield* Docker.Context("volume-context", {
+                docker: "host=unix:///var/run/docker.sock",
+              });
+              const volume = yield* Docker.Volume("context-volume", {
+                context,
+                labels: { generation },
+              });
+              return { context, volume };
+            });
+
+          yield* stack.destroy();
+          const first = yield* stack.deploy(program("1"));
+          yield* docker.context.remove(first.context.name, true);
+
+          const plan = yield* stack.plan(program("2"));
+          expect(plan.resources["volume-context"]).toMatchObject({ action: "update" });
+          expect(plan.resources["context-volume"]).toMatchObject({ action: "replace" });
+
+          const second = yield* stack.deploy(program("2"));
+          expect(second.volume.name).not.toBe(first.volume.name);
+          const live = yield* docker.volume.inspect(second.volume.name, second.context.name);
+          expect(live.Labels?.generation).toBe("2");
+          const old = yield* docker.volume.inspect(first.volume.name).pipe(Effect.flip);
+          expect(old.reason._tag).toBe("NotFound");
+
+          yield* stack.destroy();
+          const gone = yield* docker.volume.inspect(second.volume.name).pipe(Effect.flip);
+          expect(gone.reason._tag).toBe("NotFound");
+        }),
+    );
   },
 );

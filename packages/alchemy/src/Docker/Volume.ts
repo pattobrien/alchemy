@@ -127,15 +127,20 @@ export const VolumeProvider = () =>
           return owned ? attrs : Unowned(attrs);
         }),
         diff: Effect.fn(function* ({ id, instanceId, output, news, olds }) {
-          if (!isResolved(news)) return undefined;
-          if (dockerContextName(olds?.context) !== dockerContextName(news?.context)) {
+          const context = news && "context" in news ? news.context : undefined;
+          const props = news && "context" in news ? { ...news, context: undefined } : news;
+          if (!isResolved(props)) return undefined;
+          if (
+            isResolved(context) &&
+            dockerContextName(olds?.context) !== dockerContextName(context)
+          ) {
             return { action: "replace" as const, deleteFirst: true };
           }
-          const args = yield* makeVolumeArgs(id, news, instanceId);
+          const args = yield* makeVolumeArgs(id, props, instanceId);
           // Auto-generated names are engine-owned: the deployed name stays
           // authoritative even if the generator would name this id differently
           // today. Only an explicit user-provided name can force a replace.
-          const desiredName = news?.name ?? output?.name ?? args.name;
+          const desiredName = props?.name ?? output?.name ?? args.name;
           if (
             output?.name !== desiredName ||
             output?.driver !== args.driver ||
@@ -144,7 +149,10 @@ export const VolumeProvider = () =>
             // the observed volume but must not drive replacement.
             !Equal.equals(stripInternalTags(output?.labels), args.label ?? {})
           ) {
-            return { action: "replace" as const, deleteFirst: true };
+            return {
+              action: "replace" as const,
+              deleteFirst: isResolved(context) || props?.name === output?.name,
+            };
           }
         }),
         reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {

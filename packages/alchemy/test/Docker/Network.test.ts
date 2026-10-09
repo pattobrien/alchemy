@@ -159,6 +159,44 @@ describe(
         expect(second.labels.generation).toBe("2");
       }),
     );
+
+    test.provider(
+      "replaces a network whose labels change while its context is re-created",
+      (stack) =>
+        Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          const program = (generation: string) =>
+            Effect.gen(function* () {
+              const context = yield* Docker.Context("network-context", {
+                docker: "host=unix:///var/run/docker.sock",
+              });
+              const network = yield* Docker.Network("context-network", {
+                context,
+                labels: { generation },
+              });
+              return { context, network };
+            });
+
+          yield* stack.destroy();
+          const first = yield* stack.deploy(program("1"));
+          yield* docker.context.remove(first.context.name, true);
+
+          const plan = yield* stack.plan(program("2"));
+          expect(plan.resources["network-context"]).toMatchObject({ action: "update" });
+          expect(plan.resources["context-network"]).toMatchObject({ action: "replace" });
+
+          const second = yield* stack.deploy(program("2"));
+          expect(second.network.id).not.toBe(first.network.id);
+          const live = yield* docker.network.inspect(second.network.id, second.context.name);
+          expect(live.Labels?.generation).toBe("2");
+          const old = yield* docker.network.inspect(first.network.id).pipe(Effect.flip);
+          expect(old.reason._tag).toBe("NotFound");
+
+          yield* stack.destroy();
+          const gone = yield* docker.network.inspect(second.network.id).pipe(Effect.flip);
+          expect(gone.reason._tag).toBe("NotFound");
+        }),
+    );
   },
 );
 
