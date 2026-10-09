@@ -183,6 +183,35 @@ describe(
       }),
     );
 
+    test.provider("re-points a context whose endpoint drifted", (stack) =>
+      Effect.gen(function* () {
+        const docker = yield* Docker.Docker;
+        const context = Docker.Context("drifted-context", {
+          description: "points at the local engine",
+          docker: "host=unix:///var/run/docker.sock",
+        });
+
+        yield* stack.destroy();
+        const created = yield* stack.deploy(context);
+        yield* docker.context.update({
+          name: created.name,
+          docker: "host=ssh://root@192.0.2.10",
+        });
+
+        const plan = yield* stack.plan(context);
+        expect(plan.resources["drifted-context"]).toMatchObject({ action: "update" });
+
+        yield* stack.deploy(context);
+        const live = yield* docker.context.inspect(created.name);
+        expect(live.Endpoints?.docker?.Host).toBe("unix:///var/run/docker.sock");
+
+        const settled = yield* stack.plan(context);
+        expect(settled.resources["drifted-context"]).toMatchObject({ action: "noop" });
+
+        yield* stack.destroy();
+      }),
+    );
+
     test.provider("plans a replace when docker endpoint is cleared", (stack) =>
       Effect.gen(function* () {
         const base = Docker.Context("planned-context", {

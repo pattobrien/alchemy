@@ -1,6 +1,6 @@
 import * as Effect from "effect/Effect";
 import * as Equal from "effect/Equal";
-import { deepEqual, isResolved } from "../Diff.ts";
+import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { Docker, dockerPhysicalName } from "./Docker.ts";
@@ -135,24 +135,17 @@ export const ContextProvider = () =>
             return { action: "update" as const };
           }
 
-          if (output && !(yield* inspect(output.id))) {
-            return { action: "update" as const };
+          if (output) {
+            const live = yield* inspect(output.id);
+            if (!live || drifted(toContextAttributes(live), newDesired)) {
+              return { action: "update" as const };
+            }
           }
 
           return { action: "noop" as const };
         }),
-        reconcile: Effect.fn(function* ({ id, instanceId, news, olds, output }) {
+        reconcile: Effect.fn(function* ({ id, instanceId, news, output }) {
           const desired = yield* normalizeDesired(id, news, instanceId);
-
-          if (output && olds) {
-            const oldDesired = yield* normalizeDesired(id, olds, instanceId);
-            if (deepEqual(oldDesired, desired)) {
-              const current = yield* inspect(output.id);
-              if (current) {
-                return toContextAttributes(current);
-              }
-            }
-          }
 
           const existing = output ? yield* inspect(output.id) : yield* inspect(desired.name);
 
@@ -166,11 +159,7 @@ export const ContextProvider = () =>
             return toContextAttributes(yield* docker.context.inspect(desired.name));
           }
 
-          const current = toContextAttributes(existing);
-          const needsUpdate =
-            current.description !== desired.description || current.docker !== desired.docker;
-
-          if (needsUpdate) {
+          if (drifted(toContextAttributes(existing), desired)) {
             yield* docker.context.update({
               name: desired.name,
               ...(desired.docker ? { docker: desired.docker } : {}),
@@ -207,9 +196,24 @@ const normalizeDocker = (docker: string | undefined): string | undefined => {
   return value && value.length > 0 ? value : undefined;
 };
 
+const dockerHost = (docker: string | undefined): string | undefined =>
+  docker
+    ?.split(",")
+    .map((field) => field.trim())
+    .find((field) => field.startsWith("host="))
+    ?.slice("host=".length);
+
+const drifted = (
+  live: Context["Attributes"],
+  desired: { description: string; docker: string | undefined },
+): boolean => {
+  const host = dockerHost(desired.docker);
+  return live.description !== desired.description || (host !== undefined && live.docker !== host);
+};
+
 const toContextAttributes = (context: Docker.Context): Context["Attributes"] => ({
   id: context.Name,
   name: context.Name,
   description: context.Metadata?.Description ?? "",
-  docker: context.Endpoints?.docker,
+  docker: context.Endpoints?.docker?.Host,
 });

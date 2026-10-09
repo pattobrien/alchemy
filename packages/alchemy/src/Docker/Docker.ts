@@ -472,7 +472,7 @@ export declare namespace Docker {
   export interface Context {
     Name: string;
     Metadata?: { Description?: string };
-    Endpoints?: { docker?: string };
+    Endpoints?: { docker?: { Host?: string; SkipTLSVerify?: boolean } };
   }
 
   export interface Network {
