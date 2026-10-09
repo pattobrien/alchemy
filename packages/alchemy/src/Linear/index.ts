@@ -9,6 +9,7 @@ export {
 export * from "./Credentials.ts";
 export * from "./CustomView.ts";
 export * from "./IssueLabel.ts";
+export * from "./OAuthApp.ts";
 export * from "./Providers.ts";
 export * from "./Team.ts";
 export * from "./TeamDefaults.ts";

@@ -9,6 +9,7 @@ import {
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schema from "effect/Schema";
+import { listOAuthApps, readOAuthApp } from "@/Linear/WebFlows.ts";
 
 export const hasLinearCreds = !!process.env.LINEAR_API_KEY;
 
@@ -157,3 +158,13 @@ export const createWebhook = Query.fn(
 );
 
 export const deleteWebhook = Query.fn((id: string) => Linear.webhookDelete({ id }).success);
+
+export const oauthApp = (id: string) =>
+  readOAuthApp("finedesigns-test", id).pipe(
+    Effect.flatMap(Effect.fromNullishOr),
+    Effect.map((app) => ({ ...app.settings, clientId: app.clientId })),
+  );
+
+export const oauthAppIds = listOAuthApps("finedesigns-test").pipe(
+  Effect.map((apps) => apps.map((app) => app.id)),
+);
