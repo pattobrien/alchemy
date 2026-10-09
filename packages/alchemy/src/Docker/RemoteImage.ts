@@ -166,8 +166,16 @@ export const RemoteImageProvider = () =>
         reconcile: Effect.fn(function* ({ news, session }) {
           const context = dockerContextName(news.context);
           const sourceRef = remoteImageRef(news);
-          yield* session.note(`Pulling Docker image: ${sourceRef}`);
-          yield* docker.image.pull(sourceRef, news.platform, context);
+          const present =
+            news.alwaysPull === false &&
+            (yield* docker.image.inspect(sourceRef, context).pipe(
+              Effect.as(true),
+              Effect.catchReason("PlatformError", "NotFound", () => Effect.succeed(false)),
+            ));
+          if (!present) {
+            yield* session.note(`Pulling Docker image: ${sourceRef}`);
+            yield* docker.image.pull(sourceRef, news.platform, context);
+          }
 
           const finalRef = targetImageRef(news);
           if (finalRef !== sourceRef) {

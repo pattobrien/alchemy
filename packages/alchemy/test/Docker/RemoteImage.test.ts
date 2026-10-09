@@ -122,6 +122,47 @@ describe(
       }),
     );
 
+    test.provider(
+      "reuses a present image through a re-created context when alwaysPull is false",
+      (stack) =>
+        Effect.gen(function* () {
+          const docker = yield* Docker.Docker;
+          const localRef = "alchemy-test-local-only:present";
+          yield* Effect.addFinalizer(() =>
+            docker.image.remove([localRef], true).pipe(Effect.ignore),
+          );
+          yield* docker.image.pull("hello-world:latest");
+          yield* docker.image.tag("hello-world:latest", localRef);
+          const present = yield* docker.image.inspect(localRef);
+
+          const program = Effect.gen(function* () {
+            const context = yield* Docker.Context("image-context", {
+              docker: "host=unix:///var/run/docker.sock",
+            });
+            const image = yield* Docker.RemoteImage("local-only", {
+              name: "alchemy-test-local-only",
+              tag: "present",
+              alwaysPull: false,
+              context,
+            });
+            return { context, image };
+          });
+
+          yield* stack.destroy();
+          const first = yield* stack.deploy(program);
+          expect(first.image.imageId).toBe(present.Id);
+          yield* docker.context.remove(first.context.name, true);
+
+          const plan = yield* stack.plan(program);
+          expect(plan.resources["image-context"]).toMatchObject({ action: "update" });
+
+          const second = yield* stack.deploy(program);
+          expect(second.image.imageId).toBe(present.Id);
+
+          yield* stack.destroy();
+        }),
+    );
+
     test.provider("pulls, re-tags, and pushes to a registry", (stack) =>
       Effect.gen(function* () {
         const docker = yield* Docker.Docker;
