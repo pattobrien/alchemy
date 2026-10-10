@@ -1,3 +1,5 @@
+import { spawnSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
 import * as NodeServices from "@effect/platform-node/NodeServices";
 import { describe, expect, layer } from "alchemy-test";
 import * as Effect from "effect/Effect";
@@ -5,6 +7,18 @@ import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Linear from "@/Linear";
 import { listOAuthApps } from "@/Linear/WebFlows.ts";
+
+const cli = fileURLToPath(new URL("../../bin/cli.js", import.meta.url));
+
+const browserExport = Effect.sync(() =>
+  spawnSync("bun", [cli, "provider", "linear", "browser-export", "--profile", "default"], {
+    encoding: "utf8",
+    timeout: 60_000,
+  }),
+).pipe(
+  Effect.tap((result) => Effect.sync(() => expect(result.status).toBe(0))),
+  Effect.map((result) => result.stdout),
+);
 
 describe(
   "Linear browser storage state",
@@ -19,8 +33,7 @@ describe(
             const path = yield* Path.Path;
             const root = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-linear-state-" });
             const file = path.join(root, "state.json");
-            const state = yield* Linear.Browser.exportStorageState({ profile: "default-linear" });
-            yield* fs.writeFileString(file, JSON.stringify(state), { mode: 0o600 });
+            yield* fs.writeFileString(file, yield* browserExport, { mode: 0o600 });
 
             const apps = yield* listOAuthApps("finedesigns-test").pipe(
               Effect.provide(
