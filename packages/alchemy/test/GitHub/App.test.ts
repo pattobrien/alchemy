@@ -1332,6 +1332,14 @@ test.provider(
       });
       expect(isUserFacing(blind)).toBe(true);
 
+      // ...unless the program declares `public`, which is trusted unread.
+      const declared = yield* stack.deploy(
+        GitHub.App("App", { ...withKey, public: true }).pipe(adopt(true)),
+      );
+      expect(declared.appId).toBe(app.appId);
+      expect(declared.public).toBe(true);
+      yield* expectQuietDestroy(stack);
+
       const foreign = failureOf(
         yield* Effect.exit(autopilot().run(stack.deploy(deployApp(withKey)))),
       );

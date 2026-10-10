@@ -181,7 +181,8 @@ export interface App extends Resource<
  * No API reports visibility, so the browser session reads and sets it on
  * the app's Advanced settings page. Without a session, changing `public`
  * fails with `GitHubAppDrift` and that page's URL, and adopting an app
- * fails with `GitHubAppVisibilityNeedsBrowser`.
+ * trusts the declared `public`, failing with
+ * `GitHubAppVisibilityNeedsBrowser` when none is declared.
  *
  * Callback URLs, the setup URL, redirect-on-update, OAuth on install and
  * the webhook's Active checkbox cannot be read through any API. The
@@ -765,7 +766,7 @@ const observeRegistration = (
     return undefined;
   });
 
-/** Adopting the registration needs a browser session to read its visibility. */
+/** Adopting the registration needs a browser session or a declared `public`. */
 export class GitHubAppVisibilityNeedsBrowser extends Data.TaggedError(
   "GitHubAppVisibilityNeedsBrowser",
 )<{
@@ -774,7 +775,7 @@ export class GitHubAppVisibilityNeedsBrowser extends Data.TaggedError(
 }> {
   readonly [UserFacingError] = true;
   override get message(): string {
-    return `Adopting GitHub App ${this.slug} needs a browser session (GitHub.providers({ browser: true })): no API reports whether it is public, so its visibility is read from its Advanced settings page: ${this.url}`;
+    return `Adopting GitHub App ${this.slug} needs a browser session (GitHub.providers({ browser: true })) or a declared \`public\` prop: no API reports whether it is public, so its visibility is read from its Advanced settings page: ${this.url}`;
   }
 }
 
@@ -1150,7 +1151,8 @@ export const AppProvider = () =>
     // visibility in the browser session, keeping the stored one without a
     // session. Without state, one found by slug belongs to someone else
     // until `--adopt` takes it over with the key passed in `privateKey`;
-    // its visibility can only be read in the browser session.
+    // its visibility is read in the browser session, else the declared one
+    // is trusted.
     read: Effect.fn(function* ({ olds, output }) {
       const octokit = yield* octokitFor(olds.baseUrl);
       const baseUrl = yield* effectiveGitHubBaseUrl(olds.baseUrl);
@@ -1198,7 +1200,7 @@ export const AppProvider = () =>
         baseUrl,
       );
       if (live === undefined) return undefined;
-      const visibility = live.public;
+      const visibility = live.public ?? olds.public;
       if (visibility === undefined) {
         return yield* new GitHubAppVisibilityNeedsBrowser({
           slug,
