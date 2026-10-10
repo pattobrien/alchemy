@@ -43,7 +43,7 @@ const browserExportCommand = Command.make(
   ),
 ).pipe(
   Command.withDescription(
-    "Print the signed-in Linear browser session as Playwright storage state JSON for LINEAR_BROWSER_STORAGE_STATE",
+    "Print the signed-in Linear browser session as storage state JSON for LINEAR_BROWSER_STORAGE_STATE; when it expires, run browser-login and browser-export again",
   ),
 );
 
