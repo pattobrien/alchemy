@@ -129,3 +129,22 @@ export const login = Effect.fn("Linear.browserLogin")(function* (
   }
   return { profileDir };
 });
+
+export const exportStorageState = Effect.fn("Linear.browserExport")(function* (
+  options: Pick<LinearBrowserOptions, "profile" | "profileDir"> = {},
+) {
+  const profileDir = yield* resolveProfileDir({
+    profileDir: process.env.ALCHEMY_LINEAR_BROWSER_PROFILE,
+    ...options,
+  });
+  const session = yield* Browser.Browser.use((browser) =>
+    browser.withPage(`${LINEAR_ORIGIN}/login`, async (page) => ({
+      signedIn: await settle(page, 10_000),
+      state: { cookies: await page.context().cookies(LINEAR_ORIGIN), origins: [] },
+    })),
+  ).pipe(Effect.provide(Browser.layer({ profileDir })));
+  if (!session.signedIn) {
+    return yield* new LinearBrowserSignedOut({ url: `${LINEAR_ORIGIN}/login`, profileDir });
+  }
+  return session.state;
+});
