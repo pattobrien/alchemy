@@ -70,18 +70,33 @@ export const StorageState = Schema.Struct({
 
 export type StorageState = typeof StorageState.Type;
 
-export interface BrowserOptions {
+export interface BrowserConnection {
+  readonly cdpUrl: string;
+  readonly headers?: Readonly<Record<string, string | Redacted.Redacted<string>>>;
+}
+
+interface SessionOptions {
+  /** @default 30 seconds */
+  readonly defaultTimeout?: Duration.Input;
+}
+
+export interface LaunchOptions extends SessionOptions {
   readonly profileDir: string;
   /** @default true */
   readonly headless?: boolean;
   /** @default "chrome" */
   readonly channel?: "chrome" | "chromium" | "msedge";
-  /** @default 30 seconds */
-  readonly defaultTimeout?: Duration.Input;
   /** Route every page through this proxy. */
   readonly proxy?: BrowserProxy;
   readonly storageState?: StorageState | string;
+  readonly connect?: never;
 }
+
+export interface ConnectOptions extends SessionOptions {
+  readonly connect: BrowserConnection;
+}
+
+export type BrowserOptions = LaunchOptions | ConnectOptions;
 
 const LAUNCH_ARGS = ["--disable-blink-features=AutomationControlled"];
 
@@ -92,7 +107,6 @@ export class Browser extends Context.Service<
       url: string,
       f: (page: Page) => Promise<A>,
     ) => Effect.Effect<A, BrowserError>;
-    readonly profileDir: string;
   }
 >()("Alchemy::Browser") {}
 
@@ -114,8 +128,16 @@ const launchFailure = (channel: string, cause: unknown): BrowserUnavailable => {
   });
 };
 
+const loadPlaywright = Effect.tryPromise({
+  try: () => import("playwright-core"),
+  catch: (cause) =>
+    new BrowserUnavailable({
+      message: `Failed to load 'playwright-core': ${describeCause(cause)}\n${INSTALL_HINT}`,
+    }),
+});
+
 const launchContext = (
-  options: BrowserOptions,
+  options: LaunchOptions,
 ): Effect.Effect<BrowserContext, BrowserUnavailable, FileSystem.FileSystem | Scope.Scope> =>
   Effect.gen(function* () {
     const fs = yield* FileSystem.FileSystem;
@@ -130,13 +152,7 @@ const launchContext = (
           }),
       ),
     );
-    const playwright = yield* Effect.tryPromise({
-      try: () => import("playwright-core"),
-      catch: (cause) =>
-        new BrowserUnavailable({
-          message: `Failed to load 'playwright-core': ${describeCause(cause)}\n${INSTALL_HINT}`,
-        }),
-    });
+    const playwright = yield* loadPlaywright;
     const context = yield* Effect.acquireRelease(
       Effect.tryPromise({
         try: () =>
@@ -161,9 +177,6 @@ const launchContext = (
       }),
       (context) => Effect.ignore(Effect.tryPromise(() => context.close())),
     );
-    yield* Effect.sync(() =>
-      context.setDefaultTimeout(Duration.toMillis(options.defaultTimeout ?? "30 seconds")),
-    );
     const storageState = options.storageState;
     if (storageState !== undefined) {
       yield* Effect.tryPromise({
@@ -177,6 +190,47 @@ const launchContext = (
     return context;
   });
 
+const connectContext = (
+  connection: BrowserConnection,
+): Effect.Effect<BrowserContext, BrowserUnavailable, Scope.Scope> =>
+  Effect.gen(function* () {
+    const playwright = yield* loadPlaywright;
+    const browser = yield* Effect.acquireRelease(
+      Effect.tryPromise({
+        try: () =>
+          playwright.chromium.connectOverCDP(connection.cdpUrl, {
+            headers: Object.fromEntries(
+              Object.entries(connection.headers ?? {}).map(([name, value]) => [
+                name,
+                Redacted.isRedacted(value) ? Redacted.value(value) : value,
+              ]),
+            ),
+          }),
+        catch: (cause) =>
+          new BrowserUnavailable({
+            message: `Could not connect to the browser at ${connection.cdpUrl}: ${describeCause(cause)}`,
+          }),
+      }),
+      (browser) => Effect.ignore(Effect.tryPromise(() => browser.close())),
+    );
+    const [context] = browser.contexts();
+    if (context === undefined) {
+      return yield* new BrowserUnavailable({
+        message: `The browser at ${connection.cdpUrl} has no default context`,
+      });
+    }
+    return context;
+  });
+
+const openContext = (options: BrowserOptions) =>
+  (options.connect === undefined ? launchContext(options) : connectContext(options.connect)).pipe(
+    Effect.tap((context) =>
+      Effect.sync(() =>
+        context.setDefaultTimeout(Duration.toMillis(options.defaultTimeout ?? "30 seconds")),
+      ),
+    ),
+  );
+
 export const layer = (
   options: BrowserOptions,
 ): Layer.Layer<Browser, never, FileSystem.FileSystem | Path.Path> =>
@@ -187,7 +241,7 @@ export const layer = (
       const path = yield* Path.Path;
       const scope = yield* Effect.scope;
       const context = yield* Effect.cached(
-        launchContext(options).pipe(
+        openContext(options).pipe(
           Scope.provide(scope),
           Effect.provideService(FileSystem.FileSystem, fs),
         ),
@@ -240,6 +294,6 @@ export const layer = (
           );
         });
 
-      return Browser.of({ withPage, profileDir: options.profileDir });
+      return Browser.of({ withPage });
     }),
   );
