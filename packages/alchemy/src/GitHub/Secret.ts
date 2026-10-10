@@ -142,7 +142,7 @@ export interface Secret extends Resource<
  */
 export const Secret = Resource<Secret>("GitHub.Secret");
 
-async function encryptValue(plaintext: string, publicKey: string): Promise<string> {
+export async function encryptValue(plaintext: string, publicKey: string): Promise<string> {
   const mod = await import("libsodium-wrappers");
   // Bun/ESM interop: the actual sodium API lives on `.default` when the
   // CJS module is wrapped, but is the module itself under other loaders.
