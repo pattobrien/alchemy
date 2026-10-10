@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import * as Schema from "effect/Schema";
 import type { Page } from "playwright-core";
 import { LINEAR_ORIGIN, LinearBrowser } from "./Browser.ts";
@@ -181,6 +180,27 @@ const copied = async (page: Page, label: string) => {
   throw new Error(`Copying the ${label} on ${page.url()} left the clipboard empty`);
 };
 
+const downloadManifest = async (page: Page) => {
+  const captured = await page.evaluateHandle(() => {
+    const box: { blob?: Blob } = {};
+    const create = URL.createObjectURL;
+    URL.createObjectURL = (object) => {
+      URL.createObjectURL = create;
+      if (object instanceof Blob) box.blob = object;
+      return create.call(URL, object);
+    };
+    return box;
+  });
+  await openAppMenu(page);
+  await Promise.all([
+    page.waitForEvent("download"),
+    page.getByRole("option", { name: "Download manifest" }).click(),
+  ]);
+  const text = await captured.evaluate((box) => box.blob?.text());
+  if (text === undefined) throw new Error(`The manifest download on ${page.url()} was not a Blob`);
+  return decodeManifest(text);
+};
+
 const readAppPage = async (page: Page, id: string): Promise<LiveOAuthApp | undefined> => {
   if (!(await appPage(page))) return undefined;
   await page
@@ -192,10 +212,7 @@ const readAppPage = async (page: Page, id: string): Promise<LiveOAuthApp | undef
     throw new Error(`No OAuth credentials on ${page.url()}`);
   }
   const webhookSecret = await copied(page, "Signing secret");
-  await openAppMenu(page);
-  const download = page.waitForEvent("download");
-  await page.getByRole("option", { name: "Download manifest" }).click();
-  const manifest = decodeManifest(await readFile(await (await download).path(), "utf8"));
+  const manifest = await downloadManifest(page);
   return {
     id,
     clientId,
