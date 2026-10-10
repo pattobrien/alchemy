@@ -254,6 +254,50 @@ describe("Docker.image publication", (it) => {
   }
 });
 
+describe("Docker.image.pull", (it) => {
+  it.effect(
+    "pulls a private image with credentials passed in code or with an ambient login",
+    () =>
+      Effect.gen(function* () {
+        const fs = yield* FileSystem.FileSystem;
+        const path = yield* Path.Path;
+        const docker = yield* Docker;
+        const registry = yield* authenticatedRegistry();
+        const ref = `${registry.host}/private:1`;
+        const removeLocal = docker.image.remove(ref, true).pipe(Effect.ignore);
+        yield* Effect.addFinalizer(() => removeLocal);
+        const { config } = yield* scopedBuildx("v0.26.1");
+        const cliConfig = path.join(config, "config.json");
+        yield* buildScratchImage("private", ref, registry.credentials);
+
+        yield* removeLocal;
+        const anonymous = yield* docker.image.pull(ref).pipe(Effect.flip);
+        expect(anonymous.reason.description).toMatch(/no basic auth credentials|unauthorized/i);
+
+        yield* docker.image.pull(ref, undefined, undefined, registry.credentials);
+        expect((yield* docker.image.inspect(ref)).RepoTags).toContain(ref);
+        if (yield* fs.exists(cliConfig)) {
+          expect(yield* fs.readFileString(cliConfig)).not.toContain(registry.host);
+        }
+
+        yield* removeLocal;
+        yield* fs.writeFileString(
+          cliConfig,
+          JSON.stringify({
+            auths: {
+              [registry.host]: {
+                auth: Buffer.from("alchemy:alchemy-test-password").toString("base64"),
+              },
+            },
+          }),
+        );
+        yield* docker.image.pull(ref);
+        expect((yield* docker.image.inspect(ref)).RepoTags).toContain(ref);
+      }).pipe(TestClock.withLive),
+    { tags: ["provider:docker", "local"], exclusive: true, timeout: 180_000 },
+  );
+});
+
 // How a failing `docker` command is reported, against the real CLI.
 describe("Docker.run failure output", (it) => {
   it.effect(

@@ -365,6 +365,19 @@ export type Container<Id extends string = string> = Named<Id> & {
  * }) {}
  * ```
  *
+ * **Example:** Private remote image (`image` with `registry`)
+ * ```typescript
+ * // The pull authenticates with these credentials; no `docker login` needed.
+ * export class Sandbox extends Cloudflare.Container<Sandbox>()("Sandbox", {
+ *   image: "ghcr.io/acme/sandbox:latest",
+ *   registry: {
+ *     server: "ghcr.io",
+ *     username: "octocat",
+ *     password: Config.Redacted("GHCR_TOKEN"),
+ *   },
+ * }) {}
+ * ```
+ *
  * **Example:** Reaching an arbitrary image's port from a Durable Object
  * ```typescript
  * // `external` and `remote` images expose no RPC methods, so the DO

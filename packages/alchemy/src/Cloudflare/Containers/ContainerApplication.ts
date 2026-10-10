@@ -2,6 +2,7 @@ import * as Containers from "@distilled.cloud/cloudflare/containers";
 import * as Redacted from "effect/Redacted";
 import type * as Bundle from "../../Bundle/Bundle.ts";
 import type { InlineDockerfile } from "../../Docker/Dockerfile.ts";
+import type { ImageRegistry } from "../../Docker/Registry.ts";
 import * as ProviderLayer from "../../Local/ProviderLayer.ts";
 import { type Main, type PlatformProps, type PlatformServices } from "../../Platform.ts";
 import { Resource } from "../../Resource.ts";
@@ -373,6 +374,8 @@ export interface RemoteContainerProps extends ContainerApplicationPropsBase {
    * deployed as-is and the docker pull/push round-trip is skipped entirely.
    */
   image: string;
+  /** Credentials for pulling a private {@link image}, used instead of an ambient `docker login`. */
+  registry?: ImageRegistry;
 }
 
 /**
@@ -396,6 +399,7 @@ export type ContainerApplicationProps =
 export interface AnyContainerApplicationProps extends ContainerApplicationPropsBase {
   main?: string;
   image?: string;
+  registry?: ImageRegistry;
   context?: string;
   dockerfile?: string | InlineDockerfile;
   handler?: string;
