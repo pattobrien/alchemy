@@ -6,6 +6,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import * as Scope from "effect/Scope";
 import type { BrowserContext, Page } from "playwright-core";
 import { UserFacingError } from "./UserFacingError.ts";
@@ -41,6 +42,34 @@ export interface BrowserProxy {
   readonly password?: Redacted.Redacted<string>;
 }
 
+const NameValue = Schema.Struct({ name: Schema.String, value: Schema.String });
+
+export const StorageState = Schema.Struct({
+  cookies: Schema.mutable(
+    Schema.Array(
+      Schema.Struct({
+        ...NameValue.fields,
+        domain: Schema.String,
+        path: Schema.String,
+        expires: Schema.Number,
+        httpOnly: Schema.Boolean,
+        secure: Schema.Boolean,
+        sameSite: Schema.Literals(["Strict", "Lax", "None"]),
+      }),
+    ),
+  ),
+  origins: Schema.mutable(
+    Schema.Array(
+      Schema.Struct({
+        origin: Schema.String,
+        localStorage: Schema.mutable(Schema.Array(NameValue)),
+      }),
+    ),
+  ),
+});
+
+export type StorageState = typeof StorageState.Type;
+
 export interface BrowserOptions {
   readonly profileDir: string;
   /** @default true */
@@ -51,6 +80,7 @@ export interface BrowserOptions {
   readonly defaultTimeout?: Duration.Input;
   /** Route every page through this proxy. */
   readonly proxy?: BrowserProxy;
+  readonly storageState?: StorageState | string;
 }
 
 const LAUNCH_ARGS = ["--disable-blink-features=AutomationControlled"];
@@ -134,6 +164,16 @@ const launchContext = (
     yield* Effect.sync(() =>
       context.setDefaultTimeout(Duration.toMillis(options.defaultTimeout ?? "30 seconds")),
     );
+    const storageState = options.storageState;
+    if (storageState !== undefined) {
+      yield* Effect.tryPromise({
+        try: () => context.setStorageState(storageState),
+        catch: (cause) =>
+          new BrowserUnavailable({
+            message: `Could not restore the browser storage state: ${describeCause(cause)}`,
+          }),
+      });
+    }
     return context;
   });
 
