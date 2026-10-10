@@ -11,6 +11,7 @@ upstream has not merged yet.
 - The `GitHub.App` and `GitHub.AppInstallation` resources, and browser launcher fixes in
   `packages/alchemy/src/Browser.ts`.
 - The Linear provider in `packages/alchemy/src/Linear`.
+- `registry` credentials for a `Cloudflare.Container` pre-built `image`, passed to `Docker.image.pull`.
 - Fixes with open upstream PRs: `Artifacts.cached` completes its waiters on failure
   ([#1853](https://github.com/alchemy-run/alchemy/pull/1853)), typed Stack stages
   ([#2131](https://github.com/alchemy-run/alchemy/pull/2131)), `GitHub.Ruleset` adoption

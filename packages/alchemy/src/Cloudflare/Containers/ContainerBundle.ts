@@ -102,8 +102,18 @@ export const createContainerApplicationName = (id: string, name: string | undefi
  * (`Effect.die`) rather than typed errors.
  */
 export const validateContainerImageProps = (
-  props: Pick<AnyContainerApplicationProps, "main" | "image" | "dockerfile" | "context">,
+  props: Pick<
+    AnyContainerApplicationProps,
+    "main" | "image" | "registry" | "dockerfile" | "context"
+  >,
 ): Effect.Effect<void> => {
+  if (props.registry !== undefined && (props.image === undefined || props.main)) {
+    return Effect.die(
+      new Error(
+        "`registry` authenticates the pull of a pre-built `image` — declare it only with `image` and without `main`.",
+      ),
+    );
+  }
   const df = props.dockerfile;
   const hasInline = df !== undefined && isInlineDockerfile(df);
   if (props.main) {
