@@ -75,6 +75,11 @@ const browserSession = (
  *   browser: true,
  * })
  * ```
+ *
+ * Where no signed-in profile exists, such as CI, `browser: true` restores the
+ * session from `LINEAR_BROWSER_STORAGE_STATE`, the Playwright storage state JSON.
+ * `alchemy provider linear browser-export` prints that JSON from the signed-in
+ * profile. When the session expires, run `browser-login` and `browser-export` again.
  */
 export const providers = ({
   credentials = Credentials.fromAuthProvider(),
