@@ -15,7 +15,7 @@ export const LOGIN_COMMAND = "alchemy provider linear browser-login";
 
 export const LINEAR_ORIGIN = "https://linear.app";
 
-export interface LinearBrowserOptions {
+export interface LinearProfileOptions {
   /** Browser profile name under `~/.alchemy/browser`. @default `<alchemy profile>-linear` */
   readonly profile?: string;
   /** Absolute browser profile directory; overrides `profile`. */
@@ -23,15 +23,26 @@ export interface LinearBrowserOptions {
   /** @default true */
   readonly headless?: boolean;
   readonly storageState?: Browser.StorageState | string;
+  readonly connect?: never;
 }
+
+export interface LinearConnectOptions {
+  readonly connect: Browser.BrowserConnection;
+}
+
+export type LinearBrowserOptions = LinearProfileOptions | LinearConnectOptions;
+
+export type LinearBrowserSession = { readonly profileDir: string } | { readonly cdpUrl: string };
 
 export class LinearBrowserSignedOut extends Data.TaggedError("LinearBrowserSignedOut")<{
   readonly url: string;
-  readonly profileDir: string;
+  readonly session: LinearBrowserSession;
 }> {
   readonly [UserFacingError] = true;
   override get message(): string {
-    return `Linear is not signed in on ${this.url} (browser profile: ${this.profileDir}). Run \`${LOGIN_COMMAND}\` to sign in.`;
+    return "cdpUrl" in this.session
+      ? `Linear is not signed in on ${this.url} (remote browser: ${this.session.cdpUrl}). Sign in its default context.`
+      : `Linear is not signed in on ${this.url} (browser profile: ${this.session.profileDir}). Run \`${LOGIN_COMMAND}\` to sign in.`;
   }
 }
 
@@ -44,7 +55,6 @@ export class LinearBrowser extends Context.Service<
       url: string,
       f: (page: Page) => Promise<A>,
     ) => Effect.Effect<A, LinearBrowserError>;
-    readonly profileDir: string;
   }
 >()("Linear::Browser") {}
 
@@ -65,7 +75,7 @@ const settle = async (page: Page, timeout: number) => {
   return inWorkspace(new URL(page.url()));
 };
 
-const resolveProfileDir = (options: LinearBrowserOptions) =>
+const resolveProfileDir = (options: LinearProfileOptions) =>
   Effect.sync(
     () =>
       options.profileDir ??
@@ -74,24 +84,43 @@ const resolveProfileDir = (options: LinearBrowserOptions) =>
       ),
   );
 
+const sessionOf = (
+  options: LinearBrowserOptions,
+): Effect.Effect<{
+  readonly session: LinearBrowserSession;
+  readonly browser: Layer.Layer<Browser.Browser, never, FileSystem.FileSystem | Path.Path>;
+}> =>
+  options.connect === undefined
+    ? Effect.map(resolveProfileDir(options), (profileDir) => ({
+        session: { profileDir },
+        browser: Browser.layer({
+          profileDir,
+          headless: options.headless,
+          storageState: options.storageState,
+        }),
+      }))
+    : Effect.succeed({
+        session: { cdpUrl: options.connect.cdpUrl },
+        browser: Browser.layer({ connect: options.connect }),
+      });
+
 export const layer = (
   options: LinearBrowserOptions = {},
 ): Layer.Layer<LinearBrowser, never, FileSystem.FileSystem | Path.Path> =>
   Layer.unwrap(
-    Effect.map(resolveProfileDir(options), (profileDir) =>
+    Effect.map(sessionOf(options), ({ session, browser: browserLayer }) =>
       Layer.effect(
         LinearBrowser,
         Effect.gen(function* () {
           const browser = yield* Browser.Browser;
           return LinearBrowser.of({
-            profileDir,
             page: (url, f) =>
               browser
                 .withPage(url, async (page) => {
                   const login = page.getByRole("heading", { name: LOGIN_HEADING });
                   await page.getByRole("main").or(login).first().waitFor();
                   if (await login.isVisible()) {
-                    throw new LinearBrowserSignedOut({ url, profileDir });
+                    throw new LinearBrowserSignedOut({ url, session });
                   }
                   return f(page);
                 })
@@ -104,15 +133,7 @@ export const layer = (
                 ),
           });
         }),
-      ).pipe(
-        Layer.provide(
-          Browser.layer({
-            profileDir,
-            headless: options.headless,
-            storageState: options.storageState,
-          }),
-        ),
-      ),
+      ).pipe(Layer.provide(browserLayer)),
     ),
   );
 
@@ -127,7 +148,7 @@ const storageStateFromEnv = Effect.suspend(() => {
       );
 });
 
-export const fromEnv = (overrides: LinearBrowserOptions = {}) =>
+export const fromEnv = (overrides: LinearProfileOptions = {}) =>
   Layer.unwrap(
     Effect.map(storageStateFromEnv, (storageState) =>
       layer({
@@ -145,7 +166,7 @@ const signedIn = (profileDir: string, headless: boolean, timeout: number) =>
   ).pipe(Effect.provide(Browser.layer({ profileDir, headless })));
 
 export const login = Effect.fn("Linear.browserLogin")(function* (
-  options: Omit<LinearBrowserOptions, "headless"> = {},
+  options: Omit<LinearProfileOptions, "headless"> = {},
 ) {
   const profileDir = yield* resolveProfileDir({
     profileDir: process.env.ALCHEMY_LINEAR_BROWSER_PROFILE,
@@ -153,13 +174,16 @@ export const login = Effect.fn("Linear.browserLogin")(function* (
   });
   if (yield* signedIn(profileDir, true, 10_000)) return { profileDir };
   if (!(yield* signedIn(profileDir, false, 30 * 60_000))) {
-    return yield* new LinearBrowserSignedOut({ url: `${LINEAR_ORIGIN}/login`, profileDir });
+    return yield* new LinearBrowserSignedOut({
+      url: `${LINEAR_ORIGIN}/login`,
+      session: { profileDir },
+    });
   }
   return { profileDir };
 });
 
 export const exportStorageState = Effect.fn("Linear.browserExport")(function* (
-  options: Pick<LinearBrowserOptions, "profile" | "profileDir"> = {},
+  options: Pick<LinearProfileOptions, "profile" | "profileDir"> = {},
 ) {
   const profileDir = yield* resolveProfileDir({
     profileDir: process.env.ALCHEMY_LINEAR_BROWSER_PROFILE,
@@ -184,7 +208,10 @@ export const exportStorageState = Effect.fn("Linear.browserExport")(function* (
     }),
   ).pipe(Effect.provide(Browser.layer({ profileDir })));
   if (!session.signedIn) {
-    return yield* new LinearBrowserSignedOut({ url: `${LINEAR_ORIGIN}/login`, profileDir });
+    return yield* new LinearBrowserSignedOut({
+      url: `${LINEAR_ORIGIN}/login`,
+      session: { profileDir },
+    });
   }
   return session.state;
 });
