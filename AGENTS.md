@@ -1198,6 +1198,8 @@ Rules of thumb:
 
 # Pull Request Conventions
 
+**Audit every PR before asking for a merge.** Run `/audit <PR numbers or URLs>` on each PR you open or review. The skill lives in `.agents/skills/audit/` and is symlinked into `.claude/skills/`. It merges main, checks the tests and JSDoc against the standards in this file, runs the suites, rewrites the description as developer-experience snippets, and ends with a merge-or-close recommendation. To find PRs by a search criteria instead of a named list, run `/pr-queue <criteria>`.
+
 When you automatically open a PR, it MUST follow this structure:
 
 - **Title**: Use conventional commit format (e.g. `fix(website): mobile theme metas`, `feat(aws/s3): add bucket lifecycle rules`).
