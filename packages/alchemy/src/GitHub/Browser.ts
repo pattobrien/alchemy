@@ -5,6 +5,7 @@ import type * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import type * as Path from "effect/Path";
 import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
 import type { Page } from "playwright-core";
 import { browserProfileDir } from "../Auth/Paths.ts";
 import { DEFAULT_PROFILE_NAME } from "../Auth/Profile.ts";
@@ -33,6 +34,7 @@ export interface GitHubBrowserOptions {
   readonly baseUrl?: string;
   /** Sign in and confirm sudo mode unattended. */
   readonly credentials?: GitHubBrowserCredentials;
+  readonly storageState?: Browser.StorageState | string;
 }
 
 /** The browser profile holds no GitHub session (or it could not be restored). */
@@ -320,6 +322,7 @@ export const layer = (
           Browser.layer({
             profileDir: resolved.profileDir,
             headless: options.headless,
+            storageState: options.storageState,
           }),
         ),
       ),
@@ -329,8 +332,8 @@ export const layer = (
 /**
  * Options from the environment: `GITHUB_BROWSER_USERNAME`,
  * `GITHUB_BROWSER_PASSWORD`, `GITHUB_BROWSER_TOTP_SECRET`,
- * `ALCHEMY_GITHUB_BROWSER_PROFILE` and `GITHUB_BROWSER_HEADLESS=0` to show
- * the window. Unset variables leave their option undefined.
+ * `GITHUB_BROWSER_STORAGE_STATE`, `ALCHEMY_GITHUB_BROWSER_PROFILE` and
+ * `GITHUB_BROWSER_HEADLESS=0` to show the window. Unset variables leave their option undefined.
  */
 export const optionsFromEnv: Effect.Effect<GitHubBrowserOptions> = Effect.gen(function* () {
   const env = yield* Effect.sync(() => ({
@@ -339,6 +342,7 @@ export const optionsFromEnv: Effect.Effect<GitHubBrowserOptions> = Effect.gen(fu
     totpSecret: process.env.GITHUB_BROWSER_TOTP_SECRET,
     profileDir: process.env.ALCHEMY_GITHUB_BROWSER_PROFILE,
     headless: process.env.GITHUB_BROWSER_HEADLESS,
+    storageState: process.env.GITHUB_BROWSER_STORAGE_STATE,
   }));
   if ((env.username === undefined) !== (env.password === undefined)) {
     return yield* Effect.die(
@@ -353,10 +357,21 @@ export const optionsFromEnv: Effect.Effect<GitHubBrowserOptions> = Effect.gen(fu
           password: Redacted.make(env.password),
           totpSecret: env.totpSecret === undefined ? undefined : Redacted.make(env.totpSecret),
         };
+  const storageState =
+    env.storageState === undefined
+      ? undefined
+      : yield* Schema.decodeUnknownEffect(Schema.fromJsonString(Browser.StorageState))(
+          env.storageState,
+        ).pipe(
+          Effect.catch(() =>
+            Effect.die(new Error("GITHUB_BROWSER_STORAGE_STATE is not a Playwright storage state")),
+          ),
+        );
   return {
     profileDir: env.profileDir,
     headless: env.headless === undefined ? undefined : env.headless !== "0",
     credentials,
+    storageState,
   };
 });
 
@@ -434,3 +449,25 @@ export const login = (
           );
     return { profileDir: resolved.profileDir, user };
   });
+
+export const exportStorageState = Effect.fn("GitHub.browserExport")(function* (
+  options: Pick<GitHubBrowserOptions, "profile" | "profileDir" | "baseUrl"> = {},
+) {
+  const resolved = yield* resolveOptions({
+    profileDir: process.env.ALCHEMY_GITHUB_BROWSER_PROFILE,
+    ...options,
+  });
+  const session = yield* Browser.Browser.use((browser) =>
+    browser.withPage(`${resolved.origin}/`, async (page) => ({
+      user: await currentUser(page),
+      state: { cookies: await page.context().cookies(resolved.origin), origins: [] },
+    })),
+  ).pipe(Effect.provide(Browser.layer({ profileDir: resolved.profileDir })));
+  if (session.user === null) {
+    return yield* new GitHubBrowserSignedOut({
+      url: `${resolved.origin}/`,
+      profileDir: resolved.profileDir,
+    });
+  }
+  return session.state;
+});

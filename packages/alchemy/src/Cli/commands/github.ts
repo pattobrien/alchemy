@@ -1,4 +1,5 @@
 import { Command, Flag } from "effect/cli";
+import * as Console from "effect/Console";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as GitHub from "../../Alchemist/routes/github.ts";
@@ -46,6 +47,31 @@ const browserLoginCommand = Command.make(
   ),
 );
 
+const browserExportCommand = Command.make(
+  "browser-export",
+  { envFile, profile, baseUrl },
+  instrumentCommand(
+    "provider.github.browser-export",
+    (a: { profile: string | undefined; baseUrl: string | undefined }) => ({
+      "alchemy.profile": a.profile ?? "",
+      "github.base_url": a.baseUrl ?? "",
+    }),
+  )(
+    Effect.fn(function* ({ envFile, profile, baseUrl }) {
+      const state = yield* GitHub.browserExport({
+        profile,
+        baseUrl,
+        envFile: Option.getOrUndefined(envFile),
+      });
+      yield* Console.log(JSON.stringify(state));
+    }),
+  ),
+).pipe(
+  Command.withDescription(
+    "Print the signed-in GitHub browser session as storage state JSON for GITHUB_BROWSER_STORAGE_STATE; when it expires, run browser-login and browser-export again",
+  ),
+);
+
 const browserLogoutCommand = Command.make(
   "browser-logout",
   { envFile, profile },
@@ -67,5 +93,5 @@ const browserLogoutCommand = Command.make(
 
 export const githubCommand = Command.make("github", {}).pipe(
   Command.withDescription("Manage GitHub provider prerequisites"),
-  Command.withSubcommands([browserLoginCommand, browserLogoutCommand]),
+  Command.withSubcommands([browserLoginCommand, browserExportCommand, browserLogoutCommand]),
 );

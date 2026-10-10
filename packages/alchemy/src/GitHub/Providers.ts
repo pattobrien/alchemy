@@ -39,7 +39,9 @@ export interface ProvidersOptions extends GitHubAuthOptions {
    * web UI (registering, deleting and installing apps, repairing their
    * settings). `true` reads it from the environment
    * ({@link Browser.fromEnv}); an options object configures it directly
-   * ({@link Browser.layer}). Without it those steps prompt a human.
+   * ({@link Browser.layer}). Without it those steps prompt a human. Where no
+   * signed-in profile exists, such as CI, `true` restores the session from
+   * `GITHUB_BROWSER_STORAGE_STATE`, printed by `alchemy provider github browser-export`.
    */
   browser?: Browser.GitHubBrowserOptions | true;
 }
