@@ -14,6 +14,7 @@ export {
 export * from "./Collaborator.ts";
 export * from "./Comment.ts";
 export { GitHubCredentials, fromEnv, fromToken } from "./Credentials.ts";
+export * from "./DependabotSecret.ts";
 export * from "./Env.ts";
 export * from "./Environment.ts";
 export * from "./Label.ts";
