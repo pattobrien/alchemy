@@ -547,7 +547,6 @@
     "drizzle-kit": "catalog:",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
-    "inngest": "catalog:",
     "inngest-cli": "catalog:",
     "mongodb": "catalog:",
     "mysql2": "catalog:",
@@ -592,9 +591,6 @@
       "optional": true
     },
     "drizzle-orm": {
-      "optional": true
-    },
-    "inngest": {
       "optional": true
     },
     "inngest-cli": {

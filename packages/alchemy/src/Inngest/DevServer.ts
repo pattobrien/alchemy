@@ -97,8 +97,6 @@ class DevServerNotReady extends Data.TaggedError("Inngest.DevServerNotReady")<{
  * ### Local development
  * **Example:** Worker and app synced into the Dev Server
  * ```typescript
- * import { functions, inngest } from "./src/inngest.ts";
- *
  * const devServer = yield* Inngest.DevServer("inngest");
  * const worker = yield* Cloudflare.Worker("api", {
  *   main: "./src/worker.ts",
@@ -106,8 +104,8 @@ class DevServerNotReady extends Data.TaggedError("Inngest.DevServerNotReady")<{
  * });
  *
  * yield* Inngest.App("app", {
- *   client: inngest,
- *   functions,
+ *   appId: "my-app",
+ *   functions: ["send-welcome-email", "sync-orders"],
  *   url: Output.interpolate`${worker.url}/api/inngest`,
  *   version: worker.hash,
  *   devServer: devServer.url,

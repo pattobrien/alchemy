@@ -4,16 +4,12 @@ import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Stream from "effect/Stream";
-import type { InngestFunction } from "inngest";
 import * as pathe from "pathe";
 import * as Cloudflare from "@/Cloudflare";
 import * as Inngest from "@/Inngest";
 import * as Output from "@/Output";
 import type * as Plan from "@/Plan";
 import * as Test from "@/Test/Alchemy";
-import * as v1Tuned from "./fixtures/app-v1-tuned.ts";
-import * as v1 from "./fixtures/app-v1.ts";
-import * as v2 from "./fixtures/app-v2.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), Inngest.providers()),
@@ -25,12 +21,9 @@ const APP_ID = "alchemy-test-app";
 
 const fixture = (file: string) => pathe.resolve(import.meta.dirname, "fixtures", file);
 
-const modules = { v1, v2 };
+const functionIds = { v1: ["ping"], v2: ["ping", "pong", "pong-failure"] };
 
-const preview = (
-  version: "v1" | "v2",
-  options: { functions?: ReadonlyArray<InngestFunction.Any>; version?: boolean } = {},
-) =>
+const preview = (version: "v1" | "v2", options: { functions?: ReadonlyArray<string> } = {}) =>
   Effect.gen(function* () {
     const { apiKey } = yield* yield* Credentials;
     const env = yield* Inngest.BranchEnvironment("Preview");
@@ -42,10 +35,10 @@ const preview = (
       },
     });
     const app = yield* Inngest.App("App", {
-      client: modules[version].inngest,
-      functions: options.functions ?? modules[version].functions,
+      appId: APP_ID,
+      functions: options.functions ?? functionIds[version],
       url: Output.interpolate`${worker.url}/api/inngest`,
-      version: options.version === false ? undefined : worker.hash,
+      version: worker.hash,
       environment: env.name,
     });
     return { env, app };
@@ -90,7 +83,7 @@ test.provider.skipIf(!hasInngestCreds)(
 );
 
 test.provider.skipIf(!hasInngestCreds)(
-  "a function config change plans an app update on its own",
+  "a function list change plans an app update on its own",
   (stack) =>
     Effect.gen(function* () {
       yield* stack.destroy();
@@ -102,20 +95,9 @@ test.provider.skipIf(!hasInngestCreds)(
       expect(actionOf(stable, "InngestAppWorker")).toBe("noop");
       expect(actionOf(stable, "App")).toBe("noop");
 
-      const tuned = yield* stack.plan(preview("v1", { functions: v1Tuned.functions }));
-      expect(actionOf(tuned, "InngestAppWorker")).toBe("noop");
-      expect(actionOf(tuned, "App")).toBe("update");
-
-      const unversioned = yield* stack.deploy(
-        preview("v1", { functions: v1Tuned.functions, version: false }),
-      );
-      expect(unversioned.app.functions).toEqual(["ping"]);
-      expect(yield* listFunctions(unversioned.env.name)).toEqual(["ping"]);
-
-      const settled = yield* stack.plan(
-        preview("v1", { functions: v1Tuned.functions, version: false }),
-      );
-      expect(actionOf(settled, "App")).toBe("noop");
+      const added = yield* stack.plan(preview("v1", { functions: ["ping", "pong"] }));
+      expect(actionOf(added, "InngestAppWorker")).toBe("noop");
+      expect(actionOf(added, "App")).toBe("update");
 
       yield* stack.destroy();
     }),

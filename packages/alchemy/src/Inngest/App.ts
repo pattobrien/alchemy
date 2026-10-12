@@ -3,7 +3,6 @@ import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import type { Inngest as InngestClient, InngestFunction } from "inngest";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import type { InputProps } from "../Input.ts";
@@ -15,8 +14,8 @@ import type { Providers } from "./Providers.ts";
 
 export interface AppProps {
   /**
-   * The app id, the `id` given to `new Inngest({ id })`. `Inngest.App` reads
-   * it from `client`. Changing it triggers a replacement.
+   * The app id the host's Inngest client serves under. Changing it triggers a
+   * replacement.
    */
   appId: string;
   /** Full URL of the app's serve endpoint, e.g. `https://api.example.com/api/inngest`. */
@@ -54,12 +53,8 @@ export interface AppAttributes {
 
 /** One function the host serves, recorded as a binding on `Inngest.App`. */
 export interface AppFunctionBinding {
-  /** The function id, `fn.id()`. */
+  /** The function id. */
   id: string;
-  /** Whether the function has an `onFailure` handler. */
-  onFailure: boolean;
-  /** The function's options as plain data, without handlers or middleware. */
-  config: Record<string, unknown>;
 }
 
 export type AppResource = Resource<
@@ -73,10 +68,14 @@ export type AppResource = Resource<
 export const AppResource = Resource<AppResource>("Inngest.App");
 
 export type AppOptions = InputProps<Omit<AppProps, "appId">> & {
-  /** The Inngest client, `new Inngest({ id })`. Its `id` is the app id. */
-  client: InngestClient.Any;
-  /** The functions the host serves. */
-  functions: ReadonlyArray<InngestFunction.Any>;
+  /** The app id the host's Inngest client serves under. */
+  appId: string;
+  /**
+   * Ids of every function the host serves, each matching the slug Inngest
+   * reports. The `inngest` SDK serves an `onFailure` handler as its own
+   * `<id>-failure` function, so list that id too.
+   */
+  functions: ReadonlyArray<string>;
 };
 
 export class AppSyncFailed extends Data.TaggedError("Inngest.AppSyncFailed")<{
@@ -110,39 +109,9 @@ export class AppFunctionsOutOfSync extends Data.TaggedError("Inngest.AppFunction
   }
 }
 
-const toBindingData = (value: unknown): unknown => {
-  if (Array.isArray(value)) {
-    return value.filter((item) => typeof item !== "function").map(toBindingData);
-  }
-  if (value === null || typeof value !== "object") return value;
-  if ("toJSON" in value && typeof value.toJSON === "function") return value.toJSON();
-  const proto = Object.getPrototypeOf(value);
-  if (proto !== Object.prototype && proto !== null) {
-    const text = String(value);
-    return text === "[object Object]" ? value.constructor.name : text;
-  }
-  return Object.fromEntries(
-    Object.entries(value)
-      .filter(([, field]) => typeof field !== "function")
-      .map(([key, field]) => [key, toBindingData(field)]),
-  );
-};
-
-const functionConfig = (fn: InngestFunction.Any): Record<string, unknown> =>
-  Object.fromEntries(
-    Object.entries(fn.opts)
-      .filter(([key, field]) => key !== "middleware" && typeof field !== "function")
-      .map(([key, field]) => [key, toBindingData(field)]),
-  );
-
-const FAILURE_SUFFIX = "-failure";
-
 export const expectedFunctionSlugs = (
   bindings: ReadonlyArray<ResourceBinding<AppFunctionBinding>>,
-) =>
-  bindings
-    .flatMap(({ data }) => (data.onFailure ? [data.id, `${data.id}${FAILURE_SUFFIX}`] : [data.id]))
-    .sort();
+) => bindings.map(({ data }) => data.id).sort();
 
 export const compareFunctions = (appId: string, expected: string[], reported: string[]) => {
   const missing = expected.filter((slug) => !reported.includes(slug));
@@ -153,15 +122,14 @@ export const compareFunctions = (appId: string, expected: string[], reported: st
 };
 
 /**
- * An Inngest app, synced from the client and functions its host serves.
+ * An Inngest app, synced from the functions its host serves.
  *
- * `Inngest.App` takes the same `client` and `functions` the host passes to
- * `serve`, and records each function's configuration as its own binding, so
- * the plan lists every function that was added, changed or removed. The host
- * can be any runtime: a Cloudflare Worker, a Lambda, a container. On deploy
- * the app asks Inngest to sync `url`, then checks that Inngest reports
- * exactly those functions. Functions the host no longer serves are archived
- * by that sync.
+ * `Inngest.App` takes the app id and the ids of the functions the host
+ * serves, and records each function as its own binding, so the plan lists
+ * every function that was added or removed. The host can be any runtime: a
+ * Cloudflare Worker, a Lambda, a container. On deploy the app asks Inngest
+ * to sync `url`, then checks that Inngest reports exactly those functions.
+ * Functions the host no longer serves are archived by that sync.
  *
  * Inngest has no API to delete an app, so destroying `Inngest.App` leaves it
  * in place. Destroy its `Inngest.BranchEnvironment` to archive a preview app.
@@ -172,13 +140,11 @@ export const compareFunctions = (appId: string, expected: string[], reported: st
  * ### Syncing an app
  * **Example:** App served by a Worker
  * ```typescript
- * import { functions, inngest } from "./src/inngest.ts";
- *
  * const worker = yield* Cloudflare.Worker("api", { main: "./src/worker.ts" });
  *
  * yield* Inngest.App("app", {
- *   client: inngest,
- *   functions,
+ *   appId: "my-app",
+ *   functions: ["send-welcome-email", "sync-orders"],
  *   url: Output.interpolate`${worker.url}/api/inngest`,
  *   version: worker.hash,
  * });
@@ -187,8 +153,6 @@ export const compareFunctions = (appId: string, expected: string[], reported: st
  * ### Preview deploys
  * **Example:** App in a branch environment
  * ```typescript
- * import { functions, inngest } from "./src/inngest.ts";
- *
  * const env = yield* Inngest.BranchEnvironment("preview");
  * const worker = yield* Cloudflare.Worker("api", {
  *   main: "./src/worker.ts",
@@ -196,8 +160,8 @@ export const compareFunctions = (appId: string, expected: string[], reported: st
  * });
  *
  * yield* Inngest.App("app", {
- *   client: inngest,
- *   functions,
+ *   appId: "my-app",
+ *   functions: ["send-welcome-email", "sync-orders"],
  *   url: Output.interpolate`${worker.url}/api/inngest`,
  *   version: worker.hash,
  *   environment: env.name,
@@ -209,22 +173,18 @@ export const compareFunctions = (appId: string, expected: string[], reported: st
  */
 export const App = (
   id: string,
-  { client, functions, url, version, environment, devServer }: AppOptions,
+  { appId, functions, url, version, environment, devServer }: AppOptions,
 ) =>
   Effect.gen(function* () {
     const app = yield* AppResource(id, {
-      appId: client.id,
+      appId,
       url,
       version,
       environment,
       devServer,
     });
     for (const fn of functions) {
-      yield* app.bind(fn.id(), {
-        id: fn.id(),
-        onFailure: Boolean(fn.opts.onFailure),
-        config: functionConfig(fn),
-      });
+      yield* app.bind(fn, { id: fn });
     }
     return app;
   });
