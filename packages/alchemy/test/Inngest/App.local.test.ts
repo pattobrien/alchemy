@@ -13,8 +13,6 @@ import * as Inngest from "@/Inngest";
 import * as Output from "@/Output";
 import * as Test from "@/Test/Alchemy";
 import { findAvailablePort } from "@/Util/Node.ts";
-import * as v1 from "./fixtures/app-v1.ts";
-import * as v2 from "./fixtures/app-v2.ts";
 
 const { test } = Test.make({
   providers: Layer.mergeAll(Cloudflare.providers(), Inngest.providers()),
@@ -27,11 +25,15 @@ const APP_ID = "alchemy-test-app";
 
 const fixture = (file: string) => pathe.resolve(import.meta.dirname, "fixtures", file);
 
-const modules = { v1, v2 };
+const functionIds = { v1: ["ping"], v2: ["ping", "pong", "pong-failure"] };
 
 const devServer = (port: number) => Inngest.DevServer("InngestDev", { port });
 
-const app = (port: number, version: "v1" | "v2") =>
+const app = (
+  port: number,
+  version: "v1" | "v2",
+  functions: ReadonlyArray<string> = functionIds[version],
+) =>
   Effect.gen(function* () {
     const dev = yield* devServer(port);
     const worker = yield* Cloudflare.Worker("InngestLocalWorker", {
@@ -39,8 +41,8 @@ const app = (port: number, version: "v1" | "v2") =>
       env: { INNGEST_DEV: dev.inngestDev },
     });
     const app = yield* Inngest.App("App", {
-      client: modules[version].inngest,
-      functions: modules[version].functions,
+      appId: APP_ID,
+      functions,
       url: Output.interpolate`${worker.url}/api/inngest`,
       version: worker.hash,
       devServer: dev.url,
@@ -105,6 +107,29 @@ test.provider(
   },
 );
 
+test.provider(
+  "fails when Inngest does not report the declared functions",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const port = yield* findAvailablePort();
+
+      const error = yield* stack.deploy(app(port, "v1", ["ping", "pong"])).pipe(Effect.flip);
+      expect(error).toMatchObject({
+        _tag: "Inngest.AppFunctionsOutOfSync",
+        appId: APP_ID,
+        missing: ["pong"],
+        unexpected: [],
+      });
+
+      yield* stack.destroy();
+    }),
+  {
+    tags: ["provider:inngest", "provider:inngest:app", "local"],
+    timeout: 180_000,
+  },
+);
+
 const remoteApp = Effect.gen(function* () {
   const { apiKey } = yield* yield* Credentials;
   const env = yield* Inngest.BranchEnvironment("RemotePreview");
@@ -116,8 +141,8 @@ const remoteApp = Effect.gen(function* () {
     },
   }).pipe(Alchemy.remote());
   const app = yield* Inngest.App("RemoteApp", {
-    client: v2.inngest,
-    functions: v2.functions,
+    appId: APP_ID,
+    functions: functionIds.v2,
     url: Output.interpolate`${worker.url}/api/inngest`,
     version: worker.hash,
     environment: env.name,
