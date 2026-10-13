@@ -3,7 +3,7 @@ import * as FileSystem from "effect/FileSystem";
 import * as Option from "effect/Option";
 import { browserProfileDir } from "../../Auth/Paths.ts";
 import { resolveProfileName } from "../../Auth/Resolve.ts";
-import { login, optionsFromEnv } from "../../GitHub/Browser.ts";
+import { exportStorageState, login, optionsFromEnv } from "../../GitHub/Browser.ts";
 import type { Target } from "../Session.ts";
 
 export interface BrowserLoginTarget extends Target {
@@ -31,6 +31,13 @@ export const browserLogin = Effect.fn("Alchemist.provider.github.browser-login")
     credentials: env.credentials,
   });
   return { profile, ...result };
+});
+
+export const browserExport = Effect.fn("Alchemist.provider.github.browser-export")(function* (
+  target: BrowserLoginTarget,
+) {
+  const profile = yield* resolveProfile(target);
+  return yield* exportStorageState({ profile, baseUrl: target.baseUrl });
 });
 
 /** Delete the persisted browser profile for the selected Alchemy profile. */
