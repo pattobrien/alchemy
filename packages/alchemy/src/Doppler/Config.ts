@@ -1,10 +1,10 @@
-import { createConfig, deleteConfig, getConfig } from "@distilled.cloud/doppler";
+import { createConfig, deleteConfig, getConfig, listConfigs } from "@distilled.cloud/doppler";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { ignoreNotFound, orUndefined } from "./Client.ts";
+import { findInPages, ignoreNotFound, orUndefined } from "./Client.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface ConfigProps {
@@ -92,8 +92,18 @@ export const Config = Resource<Config>("Doppler.Config");
 const isBuiltIn = ({ environment, name }: ConfigProps) =>
   name === environment || name === `${environment}_personal`;
 
-const get = (project: string, config: string) =>
-  orUndefined(getConfig({ project, config })).pipe(Effect.map((response) => response?.config));
+// a token scoped to some environments gets a 400, not a 404, for a config it cannot see,
+// so a missing branch config is found by listing its environment
+const find = ({ project, environment, name }: ConfigProps) =>
+  orUndefined(
+    findInPages(
+      (page) =>
+        listConfigs({ project, environment, ...page }).pipe(
+          Effect.map((response) => response.configs),
+        ),
+      (config) => config.name === name,
+    ),
+  );
 
 const attributes = (props: ConfigProps, root: boolean | undefined): ConfigAttributes => ({
   project: props.project,
@@ -117,7 +127,7 @@ export const ConfigProvider = () =>
       ),
 
     read: ({ olds }) =>
-      get(olds.project, olds.name).pipe(
+      find(olds).pipe(
         Effect.map((config) => {
           if (config === undefined) return undefined;
           const attrs = attributes(olds, config.root);
@@ -128,7 +138,7 @@ export const ConfigProvider = () =>
     reconcile: Effect.fn(function* ({ news }) {
       const config = isBuiltIn(news)
         ? (yield* getConfig({ project: news.project, config: news.name })).config
-        : ((yield* get(news.project, news.name)) ??
+        : ((yield* find(news)) ??
           (yield* createConfig({
             project: news.project,
             environment: news.environment,
