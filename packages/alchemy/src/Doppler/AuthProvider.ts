@@ -41,6 +41,7 @@ export const DOPPLER_OIDC_AUDIENCE_ENV = "DOPPLER_OIDC_AUDIENCE";
 const LOGIN_TIMEOUT = Duration.minutes(5);
 const APPROVAL_POLL_INTERVAL = Duration.seconds(2);
 const API_TIMEOUT = Duration.seconds(30);
+const OIDC_RETRY_DELAY = Duration.seconds(1);
 
 /**
  * Describe this machine the way Doppler's CLI auth endpoint expects it.
@@ -222,17 +223,33 @@ const readEnvironment = Effect.gen(function* () {
       message: `Doppler credentials are missing. In CI set ${DOPPLER_TOKEN_ENV}, or set ${DOPPLER_IDENTITY_ID_ENV} to log in with the platform's OIDC token; locally run \`alchemy profile edit --add Doppler\` and choose Login.`,
     });
   }
-  const oidc = yield* detectOidcToken({
-    token: DOPPLER_OIDC_TOKEN_ENV,
-    audience: DOPPLER_OIDC_AUDIENCE_ENV,
-  });
-  if (oidc === undefined) {
+  const credentials = yield* loginWithPlatformToken(identityId);
+  if (credentials === undefined) {
     return yield* new AuthError({
       message: `${DOPPLER_IDENTITY_ID_ENV} is set but no platform OIDC token was found. Supported: ${SUPPORTED_OIDC_PLATFORMS}; elsewhere pass the token in ${DOPPLER_OIDC_TOKEN_ENV}.`,
     });
   }
-  return yield* mintTokenFromOidc({ identityId, jwt: oidc.token });
+  return credentials;
 });
+
+/**
+ * Doppler accepts each OIDC token once, and its login endpoint now and then
+ * times out or fails to fetch the issuer's keys, so every retry fetches a
+ * fresh token from the platform.
+ */
+const loginWithPlatformToken = (identityId: string) =>
+  Effect.gen(function* () {
+    const oidc = yield* detectOidcToken({
+      token: DOPPLER_OIDC_TOKEN_ENV,
+      audience: DOPPLER_OIDC_AUDIENCE_ENV,
+    });
+    if (oidc === undefined) return undefined;
+    return yield* mintTokenFromOidc({ identityId, jwt: oidc.token });
+  }).pipe(
+    Effect.retry({
+      schedule: Schedule.max([Schedule.exponential(OIDC_RETRY_DELAY), Schedule.recurs(3)]),
+    }),
+  );
 
 /** Doppler profile authentication: explicit browser Login or a stored API token. */
 export const DopplerAuth = AuthProviderLayer<DopplerAuthConfig, DopplerResolvedCredentials>()(
