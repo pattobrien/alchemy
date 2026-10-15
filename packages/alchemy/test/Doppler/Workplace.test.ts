@@ -1,4 +1,6 @@
 import {
+  createConfig,
+  deleteConfig,
   fromApiKey,
   getConfig,
   getEnvironment,
@@ -14,8 +16,10 @@ import {
 import { expect } from "alchemy-test";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
+import { Unowned } from "@/AdoptPolicy";
 import * as Doppler from "@/Doppler";
 import * as Output from "@/Output";
+import * as Provider from "@/Provider";
 import * as Test from "@/Test/Alchemy";
 
 const { test } = Test.make({ providers: Doppler.providers() });
@@ -223,6 +227,60 @@ test.provider.skipIf(!hasDopplerCreds)(
 
       yield* stack.destroy();
       expect(yield* tagOf(getProject({ project }))).toBe("NotFound");
+    }),
+  { timeout: 120_000 },
+);
+
+test.provider.skipIf(!hasDopplerCreds)(
+  "reads a branch config through a token scoped to its environment",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const { project, apiKey } = yield* stack.deploy(
+        Effect.gen(function* () {
+          const project = yield* Doppler.Project("Probe", { name: `probe-scoped-${suffix}` });
+          const account = yield* Doppler.ServiceAccount("ScopedSa", {
+            name: `probe-scoped-sa-${suffix}`,
+            workplaceRole: "collaborator",
+          });
+          yield* Doppler.ProjectMember("ScopedSaAccess", {
+            project: project.slug,
+            memberType: "service_account",
+            memberSlug: account.slug,
+            role: "collaborator",
+            environments: ["dev"],
+          });
+          const token = yield* Doppler.ServiceAccountToken("ScopedSaToken", {
+            serviceAccount: account.slug,
+            name: "probe",
+          });
+          return { project: project.slug, apiKey: token.apiKey };
+        }),
+      );
+      const asAccount = fromApiKey({ apiKey });
+      const props = { project, environment: "dev", name: "dev_scoped" };
+      const read = Effect.gen(function* () {
+        const provider = yield* Provider.findProvider(Doppler.Config);
+        return yield* provider.read!({
+          id: "Scoped",
+          fqn: "Scoped",
+          instanceId: "Scoped",
+          olds: props,
+          output: undefined,
+        });
+      });
+
+      expect(
+        yield* tagOf(getConfig({ project, config: props.name }).pipe(Effect.provide(asAccount))),
+      ).toBe("BadRequest");
+      expect(yield* read.pipe(Effect.provide(asAccount))).toBeUndefined();
+      yield* createConfig(props).pipe(Effect.provide(asAccount));
+      const found = yield* read.pipe(Effect.provide(asAccount));
+      expect(found).toMatchObject({ ...props, root: false });
+      expect(Unowned.is(found)).toBe(true);
+
+      yield* deleteConfig({ project, config: props.name });
+      yield* stack.destroy();
     }),
   { timeout: 120_000 },
 );
