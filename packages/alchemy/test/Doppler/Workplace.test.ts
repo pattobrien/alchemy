@@ -1,0 +1,228 @@
+import {
+  fromApiKey,
+  getConfig,
+  getEnvironment,
+  getProject,
+  getSecret,
+  getV3workplaceserviceAccountsserviceAccountServiceAccountIdentitiesidentityIdentity as getIdentity,
+  projectMembersList,
+  serviceAccountsGet,
+  serviceAccountTokensGet,
+  serviceTokensList,
+  updateSecret,
+} from "@distilled.cloud/doppler";
+import { expect } from "alchemy-test";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import * as Doppler from "@/Doppler";
+import * as Output from "@/Output";
+import * as Test from "@/Test/Alchemy";
+
+const { test } = Test.make({ providers: Doppler.providers() });
+
+const hasDopplerCreds = !!process.env.DOPPLER_TOKEN;
+const suffix = crypto.randomUUID().slice(0, 8);
+
+const allNoop = (plan: { resources: Record<string, { action: string }> }) =>
+  Object.values(plan.resources).every((node) => node.action === "noop");
+
+const reveal = (value: string | Redacted.Redacted<string> | null | undefined) =>
+  Redacted.isRedacted(value) ? Redacted.value(value) : value;
+
+const tagOf = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<A, E, R>) =>
+  effect.pipe(
+    Effect.map(() => "Found"),
+    Effect.catch((error) => Effect.succeed(error._tag)),
+  );
+
+const secret = (project: string, config: string, name: string) =>
+  getSecret({ project, config, name }).pipe(
+    Effect.map(({ value }) => ({ raw: reveal(value?.raw), computed: reveal(value?.computed) })),
+  );
+
+const member = (project: string, slug: string) =>
+  projectMembersList({ project }).pipe(
+    Effect.map(({ members = [] }) => members.find((m) => m.slug === slug)),
+    Effect.map((m) => m && { role: m.role?.identifier, environments: m.environments?.toSorted() }),
+  );
+
+test.provider.skipIf(!hasDopplerCreds)(
+  "builds and destroys a project, environment, configs, secrets and a scoped service account",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const projectName = `probe-${suffix}`;
+      const reference = `\${${projectName}.pr.API_KEY}`;
+
+      const workplace = (version: 1 | 2) =>
+        Effect.gen(function* () {
+          const project = yield* Doppler.Project("Probe", { name: projectName });
+          const pr = yield* Doppler.Environment("Pr", {
+            project: project.slug,
+            slug: "pr",
+            name: "Pull Request",
+          });
+          const personal = yield* Doppler.Config("DevPersonal", {
+            project: project.slug,
+            environment: "dev",
+            name: "dev_personal",
+          });
+          const branch = yield* Doppler.Config("DevProbe", {
+            project: project.slug,
+            environment: "dev",
+            name: "dev_probe",
+          });
+          const apiKey = yield* Doppler.Secret("ApiKey", {
+            project: project.slug,
+            config: pr.slug,
+            name: "API_KEY",
+            value: Redacted.make(`probe-value-${version}`),
+            note: "probe",
+          });
+          yield* Doppler.Secret("ApiKeyRef", {
+            project: project.slug,
+            config: branch.name,
+            name: "API_KEY_REF",
+            value: Output.interpolate`\${${project.slug}.${apiKey.config}.${apiKey.name}}`,
+          });
+          const account = yield* Doppler.ServiceAccount("ProbeSa", {
+            name: `probe-sa-${suffix}`,
+            workplaceRole: "collaborator",
+          });
+          const identity = yield* Doppler.ServiceAccountIdentity("ProbeSaOidc", {
+            serviceAccount: account.slug,
+            name: "github-actions",
+            discoveryUrl: "https://token.actions.githubusercontent.com",
+            claimsType: "wildcard",
+            claims: {
+              aud: ["https://github.com/pattobrien"],
+              sub: [`repo:pattobrien/probe-${version}:*`],
+            },
+            ttlSeconds: 3600,
+          });
+          const accountToken = yield* Doppler.ServiceAccountToken("ProbeSaToken", {
+            serviceAccount: account.slug,
+            name: "probe",
+          });
+          const serviceToken = yield* Doppler.ServiceToken("ProbeReader", {
+            project: project.slug,
+            config: pr.slug,
+            name: "probe-reader",
+            access: "read",
+          });
+          yield* Doppler.ProjectMember("ProbeSaAccess", {
+            project: project.slug,
+            memberType: "service_account",
+            memberSlug: account.slug,
+            role: "viewer",
+            environments: version === 1 ? [pr.slug] : [pr.slug, "stg"],
+          });
+          return {
+            project: project.slug,
+            personalRoot: personal.root,
+            secretConfig: apiKey.config,
+            account: account.slug,
+            identity: identity.slug,
+            accountToken,
+            serviceToken,
+          };
+        });
+
+      const v1 = yield* stack.deploy(workplace(1));
+      expect(v1).toMatchObject({ project: projectName, personalRoot: false, secretConfig: "pr" });
+      expect(
+        (yield* getEnvironment({ project: v1.project, environment: "pr" })).environment,
+      ).toMatchObject({ id: "pr", name: "Pull Request" });
+      expect(yield* tagOf(getConfig({ project: v1.project, config: "dev_probe" }))).toBe("Found");
+      expect(yield* secret(v1.project, "pr", "API_KEY")).toEqual({
+        raw: "probe-value-1",
+        computed: "probe-value-1",
+      });
+      expect(yield* secret(v1.project, "dev_probe", "API_KEY_REF")).toEqual({
+        raw: reference,
+        computed: "probe-value-1",
+      });
+      expect(yield* member(v1.project, v1.account)).toEqual({
+        role: "viewer",
+        environments: ["pr"],
+      });
+      expect(
+        yield* tagOf(getIdentity({ service_account: v1.account, identity: v1.identity })),
+      ).toBe("Found");
+      expect(
+        yield* tagOf(
+          serviceAccountTokensGet({ service_account: v1.account, api_token: v1.accountToken.slug }),
+        ),
+      ).toBe("Found");
+      expect(
+        (yield* serviceTokensList({ project: v1.project, config: "pr" })).tokens?.map(
+          (t) => t.slug,
+        ),
+      ).toContain(v1.serviceToken.slug);
+      const asServiceToken = fromApiKey({ apiKey: v1.serviceToken.key });
+      expect(
+        yield* secret(v1.project, "pr", "API_KEY").pipe(Effect.provide(asServiceToken)),
+      ).toEqual({ raw: "probe-value-1", computed: "probe-value-1" });
+      const asAccount = fromApiKey({ apiKey: v1.accountToken.apiKey });
+      expect(yield* secret(v1.project, "pr", "API_KEY").pipe(Effect.provide(asAccount))).toEqual({
+        raw: "probe-value-1",
+        computed: "probe-value-1",
+      });
+      expect(
+        yield* tagOf(
+          secret(v1.project, "dev_probe", "API_KEY_REF").pipe(Effect.provide(asAccount)),
+        ),
+      ).toBe("BadRequest");
+      expect(allNoop(yield* stack.plan(workplace(1)))).toBe(true);
+
+      const v2 = yield* stack.deploy(workplace(2));
+      expect(v2.account).toBe(v1.account);
+      expect(v2.identity).toBe(v1.identity);
+      expect(v2.accountToken.slug).toBe(v1.accountToken.slug);
+      expect(yield* secret(v2.project, "dev_probe", "API_KEY_REF")).toEqual({
+        raw: reference,
+        computed: "probe-value-2",
+      });
+      expect(yield* member(v2.project, v2.account)).toEqual({
+        role: "viewer",
+        environments: ["pr", "stg"],
+      });
+
+      yield* stack.destroy();
+      expect(yield* tagOf(getProject({ project: projectName }))).toBe("NotFound");
+      expect(yield* tagOf(serviceAccountsGet({ slug: v1.account }))).toBe("NotFound");
+    }),
+  { timeout: 120_000 },
+);
+
+test.provider.skipIf(!hasDopplerCreds)(
+  "renames an environment slug in place",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const projectName = `probe-rename-${suffix}`;
+
+      const workplace = (slug: string) =>
+        Effect.gen(function* () {
+          const project = yield* Doppler.Project("Probe", { name: projectName });
+          yield* Doppler.Environment("Release", { project: project.slug, slug, name: "Release" });
+          return project.slug;
+        });
+
+      const project = yield* stack.deploy(workplace("rel"));
+      yield* updateSecret({ project, config: "rel", secrets: { KEPT: "kept" } });
+      yield* stack.deploy(workplace("release"));
+      expect(yield* secret(project, "release", "KEPT")).toEqual({ raw: "kept", computed: "kept" });
+      expect(yield* tagOf(getEnvironment({ project, environment: "rel" }))).toBe("NotFound");
+      expect(
+        (yield* getEnvironment({ project, environment: "release" })).environment,
+      ).toMatchObject({
+        id: "release",
+        name: "Release",
+      });
+
+      yield* stack.destroy();
+      expect(yield* tagOf(getProject({ project }))).toBe("NotFound");
+    }),
+  { timeout: 120_000 },
+);
