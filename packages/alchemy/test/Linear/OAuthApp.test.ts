@@ -92,3 +92,45 @@ garden.test.provider.skipIf(!hasLinearCreds)(
   cycle("a2-spike-oauth-app-remote"),
   { timeout: 300_000, tags: ["browser"], optInTags: ["browser"] },
 );
+
+garden.test.provider.skipIf(!hasLinearCreds)(
+  "creates three apps at once through the remote garden browser, each with its own credentials",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* guard;
+      yield* stack.destroy();
+      const apps = yield* stack.deploy(
+        Effect.all(
+          [1, 2, 3].map((n) =>
+            Linear.OAuthApp(`App${n}`, {
+              name: `a2-spike-oauth-app-concurrent-${n}`,
+              developer: "alchemy",
+              redirectUris: [hookUrl("oauth/callback")],
+              clientCredentials: true,
+              webhookUrl: hookUrl("oauth/webhook"),
+              webhookResourceTypes: ["AgentSessionEvent"],
+            }),
+          ),
+          { concurrency: "unbounded" },
+        ).pipe(
+          Effect.map((apps) =>
+            apps.map((app) => ({
+              applicationId: app.applicationId,
+              clientId: app.clientId,
+              clientSecret: app.clientSecret,
+            })),
+          ),
+        ),
+      );
+      for (const app of apps) {
+        expect((yield* oauthApp(app.applicationId)).clientId).toBe(Redacted.value(app.clientId));
+        yield* Linear.clientCredentialsToken({
+          clientId: Redacted.value(app.clientId),
+          clientSecret: yield* Effect.fromNullishOr(app.clientSecret),
+          scopes: ["read"],
+        });
+      }
+      yield* stack.destroy();
+    }),
+  { timeout: 300_000, tags: ["browser"], optInTags: ["browser"] },
+);
