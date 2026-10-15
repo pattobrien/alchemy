@@ -4,6 +4,7 @@ import * as HttpClient from "effect/http/HttpClient";
 import * as HttpClientResponse from "effect/http/HttpClientResponse";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
+import { AuthError } from "./AuthProvider.ts";
 import { getEnv } from "./Env.ts";
 
 /**
@@ -84,7 +85,11 @@ const PLATFORMS: ReadonlyArray<{
           Accept: "application/json; api-version=2.0",
         },
       });
-      if (response.status !== 200) return undefined;
+      if (response.status !== 200) {
+        return yield* new AuthError({
+          message: `GitHub Actions' OIDC token request answered ${response.status}`,
+        });
+      }
       const body = yield* HttpClientResponse.schemaBodyJson(GitHubTokenResponse)(response);
       return body.value ? Redacted.make(body.value) : undefined;
     }),
@@ -102,33 +107,39 @@ const PLATFORMS: ReadonlyArray<{
     // Cloud Run, Cloud Functions, and GCE: the metadata server signs
     // identity tokens for the instance's service account.
     name: "gcp",
-    probe: Effect.fn("oidc.gcp")(function* (audience) {
-      const onGcp =
-        (yield* getEnv("K_SERVICE")) ||
-        (yield* getEnv("GCE_METADATA_HOST")) ||
-        (yield* getEnv("GOOGLE_CLOUD_PROJECT"));
-      if (!onGcp) return undefined;
+    probe: Effect.fn("oidc.gcp")(
+      function* (audience) {
+        const onGcp =
+          (yield* getEnv("K_SERVICE")) ||
+          (yield* getEnv("GCE_METADATA_HOST")) ||
+          (yield* getEnv("GOOGLE_CLOUD_PROJECT"));
+        if (!onGcp) return undefined;
 
-      const url = new URL(
-        "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity",
-      );
-      if (audience !== undefined) url.searchParams.set("audience", audience);
-      const client = yield* HttpClient.HttpClient;
-      const response = yield* client.get(url, {
-        headers: { "Metadata-Flavor": "Google" },
-      });
-      if (response.status !== 200) return undefined;
-      const token = (yield* response.text).trim();
-      return token ? Redacted.make(token) : undefined;
-    }),
+        const url = new URL(
+          "http://metadata.google.internal/computeMetadata/v1/instance/service-accounts/default/identity",
+        );
+        if (audience !== undefined) url.searchParams.set("audience", audience);
+        const client = yield* HttpClient.HttpClient;
+        const response = yield* client.get(url, {
+          headers: { "Metadata-Flavor": "Google" },
+        });
+        if (response.status !== 200) return undefined;
+        const token = (yield* response.text).trim();
+        return token ? Redacted.make(token) : undefined;
+      },
+      Effect.timeout(PROBE_TIMEOUT),
+      Effect.catch(() => Effect.succeed(undefined)),
+    ),
   },
 ];
 
 /**
  * Find the OIDC token of the platform this process is running on. The
  * caller's explicit variable wins; otherwise platforms are probed in
- * order and the first token wins. A probe that fails or hangs counts as
- * "not this platform". `undefined` means nothing was detected.
+ * order and the first token wins. `undefined` means nothing was detected.
+ * A GitHub Actions token request that fails or hangs is an error the
+ * caller can retry; GCP's markers are also set off GCP, so its failed
+ * probe counts as "not this platform".
  */
 export const detectOidcToken = Effect.fn("detectOidcToken")(function* (env: OidcTokenEnv) {
   const explicit = yield* getEnv(env.token);
@@ -144,7 +155,11 @@ export const detectOidcToken = Effect.fn("detectOidcToken")(function* (env: Oidc
   for (const platform of PLATFORMS) {
     const token = yield* platform.probe(audience).pipe(
       Effect.timeout(PROBE_TIMEOUT),
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.mapError((cause) =>
+        cause instanceof AuthError
+          ? cause
+          : new AuthError({ message: `Requesting the ${platform.name} OIDC token failed`, cause }),
+      ),
     );
     if (token !== undefined) {
       const found: OidcToken = { platform: platform.name, token };
