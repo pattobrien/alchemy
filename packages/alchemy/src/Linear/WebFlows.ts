@@ -170,14 +170,21 @@ const appPage = async (page: Page) => {
 const copied = async (page: Page, label: string) => {
   const item = page.getByRole("main").getByRole("listitem").filter({ hasText: label });
   if ((await item.count()) === 0) return undefined;
-  await page.evaluate(() => navigator.clipboard.writeText(""));
+  // the clipboard is one per browser, so pages copying at once read each other's values: keep the
+  // copied text in the page
+  await page.evaluate(() => {
+    delete document.body.dataset.copied;
+    navigator.clipboard.writeText = async (text) => {
+      document.body.dataset.copied = text;
+    };
+  });
   await item.getByRole("button", { name: "Copy to clipboard" }).click();
   for (let attempt = 0; attempt < 50; attempt++) {
-    const text = await page.evaluate(() => navigator.clipboard.readText());
-    if (text !== "") return text;
+    const text = await page.evaluate(() => document.body.dataset.copied);
+    if (text !== undefined && text !== "") return text;
     await page.waitForTimeout(100);
   }
-  throw new Error(`Copying the ${label} on ${page.url()} left the clipboard empty`);
+  throw new Error(`Copying the ${label} on ${page.url()} copied nothing`);
 };
 
 const downloadManifest = async (page: Page) => {
@@ -203,9 +210,6 @@ const downloadManifest = async (page: Page) => {
 
 const readAppPage = async (page: Page, id: string): Promise<LiveOAuthApp | undefined> => {
   if (!(await appPage(page))) return undefined;
-  await page
-    .context()
-    .grantPermissions(["clipboard-read", "clipboard-write"], { origin: LINEAR_ORIGIN });
   const clientId = await copied(page, "Client ID");
   const clientSecret = await copied(page, "Client secret");
   if (clientId === undefined || clientSecret === undefined) {
