@@ -6,6 +6,7 @@ import {
   getEnvironment,
   getProject,
   getSecret,
+  listSecrets,
   getV3workplaceserviceAccountsserviceAccountServiceAccountIdentitiesidentityIdentity as getIdentity,
   projectMembersList,
   serviceAccountsGet,
@@ -42,6 +43,17 @@ const tagOf = <A, E extends { readonly _tag: string }, R>(effect: Effect.Effect<
 const secret = (project: string, config: string, name: string) =>
   getSecret({ project, config, name }).pipe(
     Effect.map(({ value }) => ({ raw: reveal(value?.raw), computed: reveal(value?.computed) })),
+  );
+
+const computedSecrets = (project: string, config: string) =>
+  listSecrets({ project, config }).pipe(
+    Effect.map(({ secrets = {} }) =>
+      Object.fromEntries(
+        Object.entries(secrets)
+          .filter(([name]) => !name.startsWith("DOPPLER_"))
+          .map(([name, value]) => [name, reveal(value?.computed)]),
+      ),
+    ),
   );
 
 const member = (project: string, slug: string) =>
@@ -283,4 +295,142 @@ test.provider.skipIf(!hasDopplerCreds)(
       yield* stack.destroy();
     }),
   { timeout: 120_000 },
+);
+
+test.provider.skipIf(!hasDopplerCreds)(
+  "inherits secrets from inheritable configs into a root and a branch config",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const sharedName = `probe-shared-${suffix}`;
+      const appName = `probe-app-${suffix}`;
+
+      const workplace = (version: 1 | 2 | 3 | 4) =>
+        Effect.gen(function* () {
+          const sharedProject = yield* Doppler.Project("Shared", { name: sharedName });
+          const sharedEnv = yield* Doppler.Environment("SharedPr", {
+            project: sharedProject.slug,
+            slug: "pr",
+            name: "Pull Request",
+          });
+          const sharedPr = yield* Doppler.Config("SharedPrConfig", {
+            project: sharedProject.slug,
+            environment: sharedEnv.slug,
+            name: sharedEnv.slug,
+            inheritable: true,
+          });
+          const sharedStg = yield* Doppler.Config("SharedStgConfig", {
+            project: sharedProject.slug,
+            environment: "stg",
+            name: "stg",
+            inheritable: true,
+          });
+          const source = yield* Doppler.Secret("Source", {
+            project: sharedProject.slug,
+            config: "prd",
+            name: "SOURCE",
+            value: Redacted.make("from-prd"),
+          });
+          yield* Doppler.Secret("SharedPlain", {
+            project: sharedPr.project,
+            config: sharedPr.name,
+            name: "SHARED_PLAIN",
+            value: Redacted.make("plain"),
+          });
+          yield* Doppler.Secret("SharedRef", {
+            project: sharedPr.project,
+            config: sharedPr.name,
+            name: "SHARED_REF",
+            value: Output.interpolate`\${${source.project}.${source.config}.${source.name}}`,
+          });
+          yield* Doppler.Secret("StgOnly", {
+            project: sharedStg.project,
+            config: sharedStg.name,
+            name: "STG_ONLY",
+            value: Redacted.make("stg"),
+          });
+          const appProject = yield* Doppler.Project("App", { name: appName });
+          const appEnv = yield* Doppler.Environment("AppPr", {
+            project: appProject.slug,
+            slug: "pr",
+            name: "Pull Request",
+          });
+          const pr = { project: sharedPr.project, config: sharedPr.name };
+          const stg = { project: sharedStg.project, config: sharedStg.name };
+          const root = yield* Doppler.Config("AppPrConfig", {
+            project: appProject.slug,
+            environment: appEnv.slug,
+            name: appEnv.slug,
+            inherits: version === 4 ? [] : [pr],
+          });
+          const branch = yield* Doppler.Config("AppPrBranch", {
+            project: root.project,
+            environment: root.environment,
+            name: "pr_1",
+            inherits: version === 1 ? undefined : version === 2 ? [stg] : [],
+          });
+          return {
+            sharedInheritable: [sharedPr.inheritable, sharedStg.inheritable],
+            app: appProject.slug,
+            root: root.inherits,
+            branch: branch.inherits,
+          };
+        });
+
+      const live = (project: string) =>
+        Effect.gen(function* () {
+          const inherits = (config: string) =>
+            getConfig({ project, config }).pipe(
+              Effect.map((response) => response.config?.inherits?.map((ref) => ref.config)),
+            );
+          return {
+            root: {
+              inherits: yield* inherits("pr"),
+              secrets: yield* computedSecrets(project, "pr"),
+            },
+            branch: {
+              inherits: yield* inherits("pr_1"),
+              secrets: yield* computedSecrets(project, "pr_1"),
+            },
+          };
+        });
+      const fromPr = { SHARED_PLAIN: "plain", SHARED_REF: "from-prd" };
+      const shared = (config: string) => [{ project: sharedName, config }];
+
+      const v1 = yield* stack.deploy(workplace(1));
+      expect(v1).toEqual({
+        sharedInheritable: [true, true],
+        app: appName,
+        root: shared("pr"),
+        branch: shared("pr"),
+      });
+      expect(yield* live(v1.app)).toEqual({
+        root: { inherits: ["pr"], secrets: fromPr },
+        branch: { inherits: ["pr"], secrets: fromPr },
+      });
+      expect(allNoop(yield* stack.plan(workplace(1)))).toBe(true);
+
+      expect((yield* stack.deploy(workplace(2))).branch).toEqual(shared("stg"));
+      expect(yield* live(v1.app)).toEqual({
+        root: { inherits: ["pr"], secrets: fromPr },
+        branch: { inherits: ["stg"], secrets: { STG_ONLY: "stg" } },
+      });
+
+      expect((yield* stack.deploy(workplace(3))).branch).toEqual([]);
+      expect(yield* live(v1.app)).toEqual({
+        root: { inherits: ["pr"], secrets: fromPr },
+        branch: { inherits: [], secrets: {} },
+      });
+
+      expect((yield* stack.deploy(workplace(4))).root).toEqual([]);
+      expect(yield* live(v1.app)).toEqual({
+        root: { inherits: [], secrets: {} },
+        branch: { inherits: [], secrets: {} },
+      });
+
+      yield* stack.destroy();
+      expect(yield* tagOf(getProject({ project: sharedName }))).toBe("NotFound");
+      expect(yield* tagOf(getProject({ project: appName }))).toBe("NotFound");
+    }),
+  { timeout: 180_000 },
 );

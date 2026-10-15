@@ -1,4 +1,11 @@
-import { createConfig, deleteConfig, getConfig, listConfigs } from "@distilled.cloud/doppler";
+import {
+  configsInheritable,
+  configsInherits,
+  createConfig,
+  deleteConfig,
+  getConfig,
+  listConfigs,
+} from "@distilled.cloud/doppler";
 import * as Effect from "effect/Effect";
 import { Unowned } from "../AdoptPolicy.ts";
 import { isResolved } from "../Diff.ts";
@@ -6,6 +13,18 @@ import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
 import { findInPages, ignoreNotFound, orUndefined } from "./Client.ts";
 import type { Providers } from "./Providers.ts";
+
+export interface ConfigReference {
+  /**
+   * Slug of the project the config belongs to.
+   */
+  project: string;
+
+  /**
+   * Config name.
+   */
+  config: string;
+}
 
 export interface ConfigProps {
   /**
@@ -24,6 +43,20 @@ export interface ConfigProps {
    * branch config is `<environment>_<suffix>`, such as `dev_ci`.
    */
   name: string;
+
+  /**
+   * Whether other configs can inherit this config's secrets. An inheritable
+   * config cannot itself inherit. Unset leaves the live setting alone.
+   */
+  inheritable?: boolean;
+
+  /**
+   * Inheritable configs whose secrets this config inherits, in the order
+   * Doppler applies them. Unset leaves the live list alone. A branch config
+   * starts with its root config's list and takes the root config's changes
+   * while the two lists match.
+   */
+  inherits?: readonly ConfigReference[];
 }
 
 export interface ConfigAttributes {
@@ -46,6 +79,16 @@ export interface ConfigAttributes {
    * Whether this is the environment's root config.
    */
   root: boolean;
+
+  /**
+   * Whether other configs can inherit this config's secrets.
+   */
+  inheritable: boolean;
+
+  /**
+   * Configs whose secrets this config inherits.
+   */
+  inherits: ConfigReference[];
 }
 
 export interface Config extends Resource<
@@ -64,6 +107,8 @@ export interface Config extends Resource<
  * deploying never creates one and destroying never deletes one. Branch
  * configs are created and deleted. A branch config that already exists is
  * never taken over silently: deploy it with `adopt(true)` to manage it.
+ * Destroying a root or personal config turns off the `inheritable` and
+ * `inherits` settings it declared.
  *
  * ### Declaring Configs
  * **Example:** Branch Config
@@ -81,6 +126,23 @@ export interface Config extends Resource<
  *   project: "api",
  *   environment: "prd",
  *   name: "prd",
+ * });
+ * ```
+ *
+ * ### Config Inheritance
+ * **Example:** Inherit a Shared Config
+ * ```typescript
+ * const shared = yield* Doppler.Config("shared-prd", {
+ *   project: "shared",
+ *   environment: "prd",
+ *   name: "prd",
+ *   inheritable: true,
+ * });
+ * yield* Doppler.Config("api-prd", {
+ *   project: "api",
+ *   environment: "prd",
+ *   name: "prd",
+ *   inherits: [{ project: shared.project, config: shared.name }],
  * });
  * ```
  *
@@ -105,11 +167,49 @@ const find = ({ project, environment, name }: ConfigProps) =>
     ),
   );
 
-const attributes = (props: ConfigProps, root: boolean | undefined): ConfigAttributes => ({
+interface LiveConfig {
+  root?: boolean;
+  inheritable?: boolean;
+  inherits?: readonly { project?: string; config?: string }[];
+}
+
+type Inheritance = Pick<ConfigAttributes, "inheritable" | "inherits">;
+
+const inheritance = (live: LiveConfig | undefined): Inheritance => ({
+  inheritable: live?.inheritable ?? false,
+  inherits: (live?.inherits ?? []).map((ref) => ({ project: ref.project!, config: ref.config! })),
+});
+
+const attributes = (props: ConfigProps, live: LiveConfig | undefined): ConfigAttributes => ({
   project: props.project,
   environment: props.environment,
   name: props.name,
-  root: root ?? false,
+  root: live?.root ?? false,
+  ...inheritance(live),
+});
+
+const sameReferences = (a: readonly ConfigReference[], b: readonly ConfigReference[]) =>
+  a.length === b.length &&
+  a.every((ref, i) => ref.project === b[i].project && ref.config === b[i].config);
+
+// an inheritable config cannot inherit, so the side being turned off goes first
+const inherit = Effect.fn(function* (props: ConfigProps, live: Inheritance) {
+  const target = { project: props.project, config: props.name };
+  const inheritable =
+    props.inheritable === undefined || props.inheritable === live.inheritable
+      ? []
+      : [configsInheritable({ ...target, inheritable: props.inheritable })];
+  const inherits =
+    props.inherits === undefined || sameReferences(props.inherits, live.inherits)
+      ? []
+      : [configsInherits({ ...target, inherits: [...props.inherits] })];
+  let current = live;
+  for (const write of props.inheritable
+    ? [...inherits, ...inheritable]
+    : [...inheritable, ...inherits]) {
+    current = inheritance((yield* write).config);
+  }
+  return current;
 });
 
 export const ConfigProvider = () =>
@@ -130,7 +230,7 @@ export const ConfigProvider = () =>
       find(olds).pipe(
         Effect.map((config) => {
           if (config === undefined) return undefined;
-          const attrs = attributes(olds, config.root);
+          const attrs = attributes(olds, config);
           return isBuiltIn(olds) ? attrs : Unowned(attrs);
         }),
       ),
@@ -144,11 +244,21 @@ export const ConfigProvider = () =>
             environment: news.environment,
             name: news.name,
           })).config);
-      return attributes(news, config?.root);
+      const live = attributes(news, config);
+      return { ...live, ...(yield* inherit(news, live)) };
     }),
 
     delete: ({ olds, output }) =>
       isBuiltIn(olds)
-        ? Effect.void
+        ? ignoreNotFound(
+            inherit(
+              {
+                ...olds,
+                inheritable: olds.inheritable ? false : undefined,
+                inherits: olds.inherits?.length ? [] : undefined,
+              },
+              output,
+            ),
+          )
         : ignoreNotFound(deleteConfig({ project: output.project, config: output.name })),
   });
