@@ -15,6 +15,7 @@ export * from "./Project.ts";
 export * from "./ProjectMember.ts";
 export * from "./Providers.ts";
 export * from "./Secret.ts";
+export * from "./SecretNote.ts";
 export {
   Secrets,
   DopplerSecretsError,

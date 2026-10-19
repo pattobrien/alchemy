@@ -7,6 +7,7 @@ import {
   getProject,
   getSecret,
   listSecrets,
+  secretsUpdateNote,
   getV3workplaceserviceAccountsserviceAccountServiceAccountIdentitiesidentityIdentity as getIdentity,
   projectMembersList,
   serviceAccountsGet,
@@ -433,4 +434,78 @@ test.provider.skipIf(!hasDopplerCreds)(
       expect(yield* tagOf(getProject({ project: appName }))).toBe("NotFound");
     }),
   { timeout: 180_000 },
+);
+
+test.provider.skipIf(!hasDopplerCreds)(
+  "sets, updates, reads and clears a note shared by a secret's configs",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const projectName = `probe-note-${suffix}`;
+
+      const workplace = (note: string | undefined) =>
+        Effect.gen(function* () {
+          const project = yield* Doppler.Project("Probe", { name: projectName });
+          const stg = yield* Doppler.Secret("ApiKeyStg", {
+            project: project.slug,
+            config: "stg",
+            name: "API_KEY",
+            value: Redacted.make("stg"),
+          });
+          yield* Doppler.Secret("ApiKeyPrd", {
+            project: project.slug,
+            config: "prd",
+            name: "API_KEY",
+            value: Redacted.make("prd"),
+          });
+          if (note !== undefined) {
+            yield* Doppler.SecretNote("ApiKeyNote", {
+              project: stg.project,
+              secret: stg.name,
+              note,
+            });
+          }
+          return project.slug;
+        });
+
+      const notes = (project: string) =>
+        Effect.all({
+          stg: getSecret({ project, config: "stg", name: "API_KEY" }),
+          prd: getSecret({ project, config: "prd", name: "API_KEY" }),
+        }).pipe(Effect.map(({ stg, prd }) => ({ stg: stg.value?.note, prd: prd.value?.note })));
+
+      const read = (olds: Doppler.SecretNoteProps) =>
+        Effect.gen(function* () {
+          const provider = yield* Provider.findProvider(Doppler.SecretNote);
+          return yield* provider.read!({
+            id: "ApiKeyNote",
+            fqn: "ApiKeyNote",
+            instanceId: "ApiKeyNote",
+            olds,
+            output: undefined,
+          });
+        });
+
+      const project = yield* stack.deploy(workplace("first"));
+      expect(yield* notes(project)).toEqual({ stg: "first", prd: "first" });
+      expect(allNoop(yield* stack.plan(workplace("first")))).toBe(true);
+
+      yield* stack.deploy(workplace("second"));
+      expect(yield* notes(project)).toEqual({ stg: "second", prd: "second" });
+
+      yield* secretsUpdateNote({ project, secret: "API_KEY", note: "edited" });
+      expect(yield* read({ project, secret: "API_KEY", note: "second" })).toEqual({
+        project,
+        secret: "API_KEY",
+        note: "edited",
+      });
+      expect(yield* read({ project, secret: "MISSING", note: "second" })).toBeUndefined();
+
+      yield* stack.deploy(workplace(undefined));
+      expect(yield* notes(project)).toEqual({ stg: "", prd: "" });
+
+      yield* stack.destroy();
+      expect(yield* tagOf(getProject({ project }))).toBe("NotFound");
+    }),
+  { timeout: 120_000 },
 );
