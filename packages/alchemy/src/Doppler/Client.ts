@@ -44,7 +44,7 @@ export const reveal = (value: string | Redacted.Redacted<string> | null | undefi
 export const sameSet = (a: readonly string[], b: readonly string[]) =>
   a.length === b.length && a.every((item) => b.includes(item));
 
-const PAGE_SIZE = 100;
+export const PAGE_SIZE = 100;
 
 export const findInPages = <T, R>(
   list: (page: {
