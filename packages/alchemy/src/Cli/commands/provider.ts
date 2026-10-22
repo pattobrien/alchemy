@@ -5,6 +5,7 @@ import * as Provider from "../../Alchemist/routes/provider.ts";
 import { CliKit } from "../CliKit/CliKit.ts";
 import { awsCommand } from "./aws.ts";
 import { cloudflareCommand } from "./cloudflare.ts";
+import { dopplerCommand } from "./doppler.ts";
 import { setExitCode } from "./errors.ts";
 import { config, envFile, profile } from "./flags.ts";
 import { githubCommand } from "./github.ts";
@@ -63,6 +64,7 @@ export const providerCommand = Command.make("provider", {}).pipe(
     checkEnvCommand,
     awsCommand,
     cloudflareCommand,
+    dopplerCommand,
     githubCommand,
     linearCommand,
   ]),
