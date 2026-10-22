@@ -60,11 +60,18 @@
     "@types/bun": "catalog:",
     "alchemy": "workspace:*",
     "effect": "catalog:",
+    "playwright-core": "catalog:",
     "typescript": "catalog:"
   },
   "peerDependencies": {
     "alchemy": "workspace:*",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "playwright-core": "catalog:"
+  },
+  "peerDependenciesMeta": {
+    "playwright-core": {
+      "optional": true
+    }
   },
   "alchemy": {
     "contributes": [

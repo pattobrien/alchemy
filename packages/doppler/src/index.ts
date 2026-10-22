@@ -9,6 +9,14 @@ export {
   type DopplerAuthConfig,
   type DopplerResolvedCredentials,
 } from "./AuthProvider.ts";
+export * as Browser from "./Browser.ts";
+export {
+  DopplerBrowser,
+  DopplerBrowserSignedOut,
+  DopplerDashboardRejected,
+  type DopplerBrowserError,
+  type DopplerBrowserOptions,
+} from "./Browser.ts";
 export * from "./Config.ts";
 export * from "./Environment.ts";
 export * from "./Project.ts";
@@ -16,6 +24,7 @@ export * from "./ProjectMember.ts";
 export * from "./Providers.ts";
 export * from "./Secret.ts";
 export * from "./SecretNote.ts";
+export * from "./SecretReminder.ts";
 export {
   Secrets,
   DopplerSecretsError,
