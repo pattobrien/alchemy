@@ -221,7 +221,7 @@ export interface Autopilot {
    * handed to the browser launcher.
    */
   readonly launched: string[];
-  /** Every `awaitExternal` prompt the provider raised (its URL). */
+  /** Every `browserLogin` prompt the provider raised (its URL). */
   readonly prompts: Array<string | undefined>;
   /**
    * Run `effect` with the test browser session in context, so every manual
@@ -276,13 +276,15 @@ export const autopilot = (
           Effect.provideService(Interaction.BrowserLauncher, launcher),
           Effect.provideService(Interaction.Interaction, {
             ...base,
-            prompt: {
-              ...base.prompt,
-              awaitExternal: (prompt: Interaction.AwaitExternalOptions) => {
-                prompts.push(prompt.url);
-                return Effect.never;
-              },
-            },
+            terminal: { ...base.terminal, input: true },
+            browserLogin: (login) =>
+              Effect.suspend(() => {
+                prompts.push(login.url);
+                return Interaction.openUrl(login.url).pipe(
+                  Effect.ignore,
+                  Effect.andThen(login.waitFor),
+                );
+              }),
           }),
         ),
       );

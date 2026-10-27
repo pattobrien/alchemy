@@ -5,7 +5,6 @@ import * as Data from "effect/Data";
 import * as Duration from "effect/Duration";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
-import type { ChildProcessSpawner } from "effect/process/ChildProcessSpawner";
 import * as Semaphore from "effect/Semaphore";
 import { GitHubBrowser, type GitHubBrowserError } from "./Browser.ts";
 
@@ -90,9 +89,8 @@ export const withBrowser = <A, E, R>(
  * Do `step` in the browser. With a {@link GitHubBrowser} session in context,
  * `automate` drives the page and `until` confirms the result from the API,
  * without any prompt; an automation failure fails the step. Otherwise ask
- * the human: open `open` (default `url`) and race `until` against the
- * waiting prompt. The prompt is raised first so that without a terminal
- * the step fails at once, before any browser opens. Either way the step is
+ * the human to do it on `open` (default `url`) while waiting for `until`;
+ * without a terminal the step fails at once, before any browser opens. Either way the step is
  * bounded by {@link ManualStepTimeout}.
  */
 export const manualStep = <A, E, R>(options: {
@@ -128,24 +126,16 @@ export const manualStep = <A, E, R>(options: {
         );
       }
       const interaction = yield* Interaction.Interaction;
-      // Invoked later by the prompt's keyboard handler, outside this fiber.
-      const reopen = Effect.runPromiseWith(yield* Effect.context<ChildProcessSpawner>());
-      return yield* Effect.raceFirst(
-        interaction.prompt
-          .awaitExternal({
-            message: `${action[0]!.toUpperCase()}${action.slice(1)} in your browser`,
-            waitingLabel: `GitHub has no API for this. ${options.instruction} on the page below; alchemy continues once it's done.`,
-            url: open,
-            allowManualInput: false,
-            onOpen: () => reopen(Interaction.openUrl(open).pipe(Effect.ignore)),
-          })
-          .pipe(
-            Effect.catchTag("NonInteractiveTerminal", () =>
-              Effect.fail(new GitHubManualStepRequired({ step, url, action })),
-            ),
-            Effect.andThen(Effect.never),
-          ),
-        Interaction.openUrl(open).pipe(Effect.ignore, Effect.andThen(options.until)),
-      ).pipe(Effect.timeoutOrElse({ duration: timeout, orElse: timedOut }));
+      if (!interaction.terminal.input) {
+        return yield* new GitHubManualStepRequired({ step, url, action });
+      }
+      return yield* interaction
+        .browserLogin({
+          provider: "GitHub",
+          url: open,
+          waitingLabel: `GitHub has no API to ${action}. ${options.instruction} on the page below; alchemy continues once it's done.`,
+          waitFor: options.until,
+        })
+        .pipe(Effect.timeoutOrElse({ duration: timeout, orElse: timedOut }));
     }),
   );
