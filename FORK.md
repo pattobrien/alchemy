@@ -35,6 +35,8 @@ Remove an item once upstream merges its PR and a sync brings the change in.
 change. At publish time the release script rewrites workspace dependencies to the same fork version,
 and each `@distilled.cloud/<pkg>` dependency to `npm:@pattobrien/distilled-<pkg>@<version>`.
 `<version>` is the `distilled` field of `scripts/release/fork.json`.
+It also renames the package's own `alchemy.contributes` specifiers to the fork name, because
+contributions resolve only under the publishing package's name.
 
 A fork tag is `v<upstream>-fork.N`, and the published version drops the `v`. `<upstream>` is the
 shared `version` in `packages/*/package.json`, for example `2.0.0-beta.81`. N increases with every

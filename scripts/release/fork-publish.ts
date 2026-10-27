@@ -81,6 +81,16 @@ const planPackage = (
   });
   const name = forkName(pkg.manifest.name);
   const publishConfig = pkg.raw.publishConfig;
+  const alchemy = pkg.raw.alchemy;
+  const ownSpecifier = (specifier: unknown) =>
+    Predicate.isString(specifier) &&
+    (specifier === pkg.manifest.name || specifier.startsWith(`${pkg.manifest.name}/`))
+      ? `${name}${specifier.slice(pkg.manifest.name.length)}`
+      : specifier;
+  const contributes =
+    Predicate.isObject(alchemy) && Array.isArray(alchemy.contributes)
+      ? { alchemy: { ...alchemy, contributes: alchemy.contributes.map(ownSpecifier) } }
+      : {};
   return {
     pkg,
     spec: `${name}@${version}`,
@@ -90,6 +100,7 @@ const planPackage = (
       name,
       version,
       ...Object.fromEntries(fields.map(({ field, rewritten }) => [field, rewritten])),
+      ...contributes,
       repository: { type: "git", url: REPOSITORY, directory: pkg.dir },
       publishConfig: {
         ...(Predicate.isObject(publishConfig) ? publishConfig : {}),
