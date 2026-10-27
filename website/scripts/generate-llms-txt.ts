@@ -76,6 +76,7 @@ const SECTIONS: Section[] = [
         "cli/inspecting-state",
         "cli/aws",
         "cli/cloudflare",
+        "cli/github",
       ],
     },
   },
