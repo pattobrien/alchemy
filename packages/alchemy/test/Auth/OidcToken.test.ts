@@ -1,5 +1,5 @@
 import { createServer, type Server } from "node:http";
-import { expect, it } from "alchemy-test";
+import { expect, it } from "@alchemy.run/test";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FetchHttpClient from "effect/http/FetchHttpClient";

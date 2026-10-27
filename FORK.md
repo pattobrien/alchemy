@@ -8,15 +8,21 @@ upstream has not merged yet.
 
 - The Inngest provider in `packages/alchemy/src/Inngest`: `BranchEnvironment`, `App`, `DevServer`,
   `EventKey`, `SigningKey`, and `Webhook`.
-- The `GitHub.App` and `GitHub.AppInstallation` resources, and browser launcher fixes in
-  `packages/alchemy/src/Browser.ts`.
-- The Linear provider in `packages/alchemy/src/Linear`.
+- The Linear provider in `packages/alchemy/src/Linear`, with its `alchemy provider linear` commands.
+- Inngest and Linear register with the CLI through the `alchemy.contributes` field of
+  `packages/alchemy/package.json`. The Inngest tests are in `packages/integration-tests/test/Inngest`.
+- The `GitHub.App`, `GitHub.AppInstallation`, and `GitHub.DependabotSecret` resources in
+  `packages/github`, with the `alchemy provider github` browser commands, and browser launcher
+  fixes in `packages/alchemy/src/Browser.ts`.
+- The Doppler resources in `packages/doppler`: `Project`, `Environment`, `Config`, `Secret`,
+  `SecretNote`, `ProjectMember`, `ServiceAccount`, `ServiceAccountIdentity`,
+  `ServiceAccountToken`, and `ServiceToken`, and a retried OIDC login in its `AuthProvider`.
+- `detectOidcToken` in `packages/alchemy/src/Auth/OidcToken.ts` fails when the GitHub Actions token
+  request fails, so a caller can retry it.
 - `registry` credentials for a `Cloudflare.Container` pre-built `image`, passed to `Docker.image.pull`.
 - Fixes with open upstream PRs: `Artifacts.cached` completes its waiters on failure
-  ([#1853](https://github.com/alchemy-run/alchemy/pull/1853)), typed Stack stages
-  ([#2131](https://github.com/alchemy-run/alchemy/pull/2131)), `GitHub.Ruleset` adoption
-  ([#2129](https://github.com/alchemy-run/alchemy/pull/2129)), and verbatim json bindings in
-  Cloudflare Preview deploys ([#2127](https://github.com/alchemy-run/alchemy/pull/2127)).
+  ([#1853](https://github.com/alchemy-run/alchemy/pull/1853)) and typed Stack stages
+  ([#2131](https://github.com/alchemy-run/alchemy/pull/2131)).
 - `submodules/distilled` points at [pattobrien/distilled](https://github.com/pattobrien/distilled).
 - The release workflow `.github/workflows/release-fork.yml` and `scripts/release/fork-publish.ts`.
 
@@ -29,6 +35,8 @@ Remove an item once upstream merges its PR and a sync brings the change in.
 change. At publish time the release script rewrites workspace dependencies to the same fork version,
 and each `@distilled.cloud/<pkg>` dependency to `npm:@pattobrien/distilled-<pkg>@<version>`.
 `<version>` is the `distilled` field of `scripts/release/fork.json`.
+It also renames the package's own `alchemy.contributes` specifiers to the fork name, because
+contributions resolve only under the publishing package's name.
 
 A fork tag is `v<upstream>-fork.N`, and the published version drops the `v`. `<upstream>` is the
 shared `version` in `packages/*/package.json`, for example `2.0.0-beta.81`. N increases with every
