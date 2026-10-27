@@ -1,4 +1,4 @@
-import { expect } from "alchemy-test";
+import { expect } from "@alchemy.run/test";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
