@@ -43,6 +43,7 @@ import { type Assets, type AssetsConfig, type AssetsProps } from "./Assets.ts";
 import { Request } from "./Request.ts";
 import type { ModuleRule } from "./Sources/Prebuilt.ts";
 import type { WorkerBuildOptions } from "./Sources/Rolldown.ts";
+import type { ViteChildConfig } from "./ViteChild.shared.ts";
 import type { WorkerAccessConfig, WorkerAccessIdentity } from "./WorkerAccess.ts";
 import { bindWorkerAsyncBindings } from "./WorkerAsyncBindings.ts";
 import type { WorkerBinding, WorkerBindingResource, WorkerBindings } from "./WorkerBinding.ts";
@@ -967,7 +968,9 @@ export interface WorkerProps<
    *
    * Use `{ mode: "external" }` to skip starting a local Worker entirely —
    * useful when an external dev server (e.g. one spawned via `Command.Dev`)
-   * is serving the content this Worker would otherwise host.
+   * is serving the content this Worker would otherwise host. Use
+   * `{ mode: "attach", url }` when a host process runs the Worker's runtime
+   * itself from the `hostConfig` attribute.
    */
   dev?:
     | {
@@ -1044,6 +1047,18 @@ export interface WorkerProps<
          * This will be returned as the `url` attribute of the Worker resource.
          */
         url?: string;
+      }
+    | {
+        /**
+         * Don't start a local Worker; a host process (e.g. a Vite plugin)
+         * runs it from the Worker's `hostConfig` attribute.
+         */
+        mode: "attach";
+        /**
+         * URL the host serves this Worker at.
+         * This will be returned as the `url` attribute of the Worker resource.
+         */
+        url: string;
       };
 }
 
@@ -1221,6 +1236,11 @@ export type Worker<Bindings = any> = Resource<
      * as a CORS allow-list.
      */
     urls: string[];
+    /**
+     * The runtime config a host process needs to run this Worker itself,
+     * set only under `alchemy dev` with `dev: { mode: "attach" }`.
+     */
+    hostConfig?: ViteChildConfig;
     /**
      * The Worker's resolved custom-domain configuration — canonical
      * `name`, `aliases`, and `redirects` as deployed — or `undefined`
