@@ -103,10 +103,8 @@ export const make = Effect.fn(function* ({ profile, envFile, omitEnv = [] }: Rpc
         for (const notify of subscribers) notify(line);
         return Effect.void;
       }
-      // Fallback path (no exec child subscribed): sidecar lines already carry
-      // the sidecar's logger prefix, so print verbatim rather than stamping
-      // this process's logger prefix on top.
-      return line.channel === "stderr" ? Console.error(line.line) : Console.log(line.line);
+      // Fallback path (no exec child subscribed).
+      return printSidecarLogLine(line);
     });
 
   const spawn = Effect.fn(function* (serverEntryUrl: string) {
@@ -344,6 +342,14 @@ const getRpcAddress = (
     return yield* Deferred.await(address);
   });
 
+/**
+ * Sidecar lines already carry the sidecar's own logger prefix
+ * (timestamp/level/fiber), so they print verbatim; routing them through this
+ * process's logger would stamp a second prefix on top.
+ */
+export const printSidecarLogLine = (line: SidecarLogLine): Effect.Effect<void> =>
+  line.channel === "stderr" ? Console.error(line.line) : Console.log(line.line);
+
 export const parseSidecarLogLine = (raw: string): SidecarLogLine | undefined => {
   try {
     return Schema.decodeUnknownOption(SidecarLogLineSchema)(JSON.parse(raw)).pipe(
@@ -365,8 +371,7 @@ export const parseSidecarLogLine = (raw: string): SidecarLogLine | undefined => 
  * takes over.
  */
 export const forwardSidecarLogs = (
-  /** Mirrors every forwarded line (e.g. into a dev log file). */
-  tee?: (line: SidecarLogLine) => void,
+  sink: (line: SidecarLogLine) => Effect.Effect<void> = printSidecarLogLine,
 ): Effect.Effect<void, never, HttpClient.HttpClient | Scope.Scope> =>
   Config.String(SPAWNER_URL_ENV_KEY).pipe(
     Effect.flatMap((spawnerUrl) => {
@@ -379,14 +384,7 @@ export const forwardSidecarLogs = (
           Stream.runForEach((raw) =>
             Effect.suspend(() => {
               const parsed = parseSidecarLogLine(raw);
-              if (parsed === undefined) return Effect.void;
-              tee?.(parsed);
-              // Sidecar lines already carry the sidecar's own logger prefix
-              // (timestamp/level/fiber) — print them verbatim; routing through
-              // this process's logger would stamp a second prefix on top.
-              return parsed.channel === "stderr"
-                ? Console.error(parsed.line)
-                : Console.log(parsed.line);
+              return parsed === undefined ? Effect.void : sink(parsed);
             }),
           ),
         );

@@ -6,6 +6,7 @@ export {
   DEFAULT_ENTRYPOINT,
   open,
   StackEntrypointError,
+  StackModuleLoader,
   type OpenOptions,
   type Session,
   type StackTarget,

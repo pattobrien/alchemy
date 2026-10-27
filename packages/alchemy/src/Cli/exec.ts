@@ -22,7 +22,7 @@ import { ProfileStoreLive } from "../Auth/Profile.ts";
 import * as Interaction from "../Interaction.ts";
 import { makeDevLogOpener } from "../Local/DevLog.ts";
 import * as RpcProviderProxy from "../Local/RpcProviderProxy.ts";
-import { forwardSidecarLogs } from "../Local/RpcSpawner.ts";
+import { forwardSidecarLogs, printSidecarLogLine } from "../Local/RpcSpawner.ts";
 import { TelemetryLive } from "../Telemetry/Layer.ts";
 import { initialCwd } from "../Util/Node.ts";
 import { PlatformServices } from "../Util/PlatformServices.ts";
@@ -253,7 +253,11 @@ const makeExec = () => {
     // to log/{stage}/{timestamp}.log; per-resource output lands in
     // log/{stage}/{fqn…}/ via the local providers.
     const devLog = yield* (yield* makeDevLogOpener)(options.stage);
-    yield* forwardSidecarLogs((entry) => devLog.writeLine(`[${entry.channel}] ${entry.line}`));
+    yield* forwardSidecarLogs((entry) =>
+      printSidecarLogLine(entry).pipe(
+        Effect.andThen(Effect.sync(() => devLog.writeLine(`[${entry.channel}] ${entry.line}`))),
+      ),
+    );
     // Single-pass runs park nothing. Otherwise Node reloads the stack graph in
     // this process; Bun exits for the supervisor to respawn (see above).
     return yield* (yield* devOnce)
