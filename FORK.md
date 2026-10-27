@@ -46,7 +46,7 @@ fork release and never reuses a number that has a tag.
 
 1. If pattobrien/distilled has a new fork release, set `distilled` in `scripts/release/fork.json`
    to its version and merge that change into `main`.
-2. Type-check `main` with `pnpm exec tsc -b`.
+2. Type-check `main` with `pnpm typecheck`.
 3. To preview the package map and its rewrites, run
    `node scripts/release/fork-publish.ts --dry-run <upstream>-fork.N`.
 4. Run `git tag v<upstream>-fork.N <sha>`, then `git push origin v<upstream>-fork.N`.
