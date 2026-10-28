@@ -1,12 +1,12 @@
 # @alchemy.run/vercel
 
-[Vercel](https://vercel.com) for [Alchemy](https://alchemy.run). Record which Vercel team owns a project, which Git repository it builds from, and which domains it serves.
+[Vercel](https://vercel.com) for [Alchemy](https://alchemy.run). Record which Vercel team owns a project, which Git repository it builds from, which domains it serves, and the DNS records of domains on Vercel DNS.
 
 ```sh
 npm install alchemy @alchemy.run/vercel effect
 ```
 
-A team, a project built from a monorepo app, and its production domain:
+A team, a project built from a monorepo app, its production domain, and a DNS record:
 
 ```typescript
 // alchemy.run.ts
@@ -34,6 +34,14 @@ export default Alchemy.Stack(
       project: project.projectId,
       teamId: team.teamId,
       name: "www.example.com",
+    });
+
+    yield* Vercel.DnsRecord("Api", {
+      domain: "example.com",
+      teamId: team.teamId,
+      name: "api",
+      type: "A",
+      value: "203.0.113.10",
     });
 
     return {

@@ -5,6 +5,7 @@ import * as FetchHttpClient from "effect/http/FetchHttpClient";
 import * as Layer from "effect/Layer";
 import { VercelAuth } from "./AuthProvider.ts";
 import * as Credentials from "./Credentials.ts";
+import { DnsRecord, DnsRecordProvider } from "./DnsRecord.ts";
 import { Project, ProjectProvider } from "./Project.ts";
 import { ProjectDomain, ProjectDomainProvider } from "./ProjectDomain.ts";
 import { Team, TeamProvider } from "./Team.ts";
@@ -16,13 +17,20 @@ export class Providers extends Provider.ProviderCollection<Providers>()("Vercel"
 export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
 
 /**
- * Vercel providers and credentials. Wires up the Team, Project and
- * ProjectDomain resources, and registers the Vercel AuthProvider so
+ * Vercel providers and credentials. Wires up the Team, Project,
+ * ProjectDomain and DnsRecord resources, and registers the Vercel AuthProvider so
  * `alchemy profile edit` can configure it.
  */
 export const providers = () =>
-  Layer.effect(Providers, Provider.collection([Project, ProjectDomain, Team])).pipe(
-    Layer.provide(Layer.mergeAll(ProjectProvider(), ProjectDomainProvider(), TeamProvider())),
+  Layer.effect(Providers, Provider.collection([DnsRecord, Project, ProjectDomain, Team])).pipe(
+    Layer.provide(
+      Layer.mergeAll(
+        DnsRecordProvider(),
+        ProjectProvider(),
+        ProjectDomainProvider(),
+        TeamProvider(),
+      ),
+    ),
     Layer.provideMerge(Credentials.fromAuthProvider()),
     Layer.provideMerge(FetchHttpClient.layer),
     Layer.provideMerge(VercelAuth),
