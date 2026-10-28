@@ -443,6 +443,12 @@ const SECTIONS: Section[] = [
     pages: { directory: "railway/frontend" },
   },
   {
+    heading: "Vercel",
+    intro:
+      "Teams, projects, domains, and Vercel DNS records as Stack resources. Spend management, deployments, and environment variables are out of scope.",
+    pages: { slugs: ["vercel/index", "vercel/setup"] },
+  },
+  {
     heading: "PlanetScale",
     intro:
       "Serverless MySQL & Postgres as Stack resources. Composes with Cloudflare Hyperdrive and Drizzle — those guides are listed under Cloudflare.",
