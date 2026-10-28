@@ -82,7 +82,7 @@ jobs:
         github.event.action == 'unlabeled') &&
        ((github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
         github.event.label.name == 'deploy-website'))
-    runs-on: blacksmith-4vcpu-ubuntu-2404
+    runs-on: namespace-profile-linux-default
     permissions:
       contents: read
       pull-requests: write
