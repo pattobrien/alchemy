@@ -107,6 +107,10 @@ dependencies or breaking conventions.
 
 Thanks to [Blacksmith](https://blacksmith.sh/?ref=alchemy.run) for sponsoring our CI runners. Their fast Linux, macOS, and Windows runners help us test our packages across platforms and deploy our content-heavy website in mere minutes.
 
+### Namespace
+
+This fork runs its Linux CI jobs on [Namespace](https://namespace.so) runners. The upstream-only jobs (package preview, website deploy) are skipped here because the fork cannot publish to the registry or reach upstream secrets.
+
 ## License
 
 Licensed under the [Apache License 2.0](./LICENSE). See
