@@ -15,13 +15,21 @@ import * as FileSystem from "effect/FileSystem";
 import * as Match from "effect/Match";
 import * as Redacted from "effect/Redacted";
 import * as Schema from "effect/Schema";
-import { mintAccessToken, parseServiceAccountKey, type ServiceAccountKey } from "./Token.ts";
+import {
+  mintAccessToken,
+  parseServiceAccountKey,
+  type MintOptions,
+  type ServiceAccountKey,
+} from "./Token.ts";
 
 export const GCP_AUTH_PROVIDER_NAME = "GCP";
 export const GOOGLE_ACCESS_TOKEN_ENV = "GOOGLE_ACCESS_TOKEN";
 export const GOOGLE_PROJECT_ID_ENV = "GOOGLE_PROJECT_ID";
 export const GOOGLE_CLOUD_PROJECT_ENV = "GOOGLE_CLOUD_PROJECT";
 export const GOOGLE_APPLICATION_CREDENTIALS_ENV = "GOOGLE_APPLICATION_CREDENTIALS";
+export const GOOGLE_CREDENTIALS_ENV = "GOOGLE_CREDENTIALS";
+export const GOOGLE_OAUTH_SCOPES_ENV = "GOOGLE_OAUTH_SCOPES";
+export const GOOGLE_AUTH_SUBJECT_ENV = "GOOGLE_AUTH_SUBJECT";
 /** Region when neither the environment nor the profile names one. */
 export const DEFAULT_GCP_REGION = "us-central1";
 
@@ -31,11 +39,22 @@ export const DEFAULT_GCP_REGION = "us-central1";
  */
 const region = Schema.optionalKey(Schema.String);
 
+/**
+ * OAuth scopes for tokens minted from a service-account key.
+ * @default ["https://www.googleapis.com/auth/cloud-platform"]
+ */
+const scopes = Schema.Array(Schema.String).pipe(Schema.optionalKey);
+
+/** Workspace user a service account impersonates through domain-wide delegation. */
+const subject = Schema.optionalKey(Schema.String);
+
 export const GcpAuthConfigSchema = Schema.Union([
   Schema.Struct({ method: Schema.Literal("env"), region }),
   Schema.Struct({
     method: Schema.Literal("serviceAccount"),
     credentialsFile: Schema.optionalKey(Schema.String),
+    scopes,
+    subject,
     region,
   }),
   Schema.Struct({ method: Schema.Literal("stored"), region }),
@@ -52,6 +71,8 @@ export const GcpStoredCredentialsSchema = Schema.Union([
     type: Schema.Literal("serviceAccount"),
     json: Schema.String,
     project: Schema.optionalKey(Schema.String),
+    scopes,
+    subject,
   }),
 ]);
 export type GcpStoredCredentials = typeof GcpStoredCredentialsSchema.Type;
@@ -75,7 +96,7 @@ const options: Array<{
   {
     value: "env",
     label: "Environment Variables",
-    description: `${GOOGLE_ACCESS_TOKEN_ENV} or ${GOOGLE_APPLICATION_CREDENTIALS_ENV} + ${GOOGLE_PROJECT_ID_ENV}`,
+    description: `${GOOGLE_ACCESS_TOKEN_ENV} or ${GOOGLE_CREDENTIALS_ENV} / ${GOOGLE_APPLICATION_CREDENTIALS_ENV} + ${GOOGLE_PROJECT_ID_ENV}`,
   },
   {
     value: "serviceAccount",
@@ -89,29 +110,80 @@ const options: Array<{
   },
 ];
 
+export const parseScopes = (value: string | undefined): ReadonlyArray<string> | undefined => {
+  const parsed = (value ?? "").split(/[\s,]+/).filter((scope) => scope.length > 0);
+  return parsed.length > 0 ? parsed : undefined;
+};
+
+const delegationOf = (options: {
+  readonly scopes?: ReadonlyArray<string>;
+  readonly subject?: string;
+}): MintOptions => ({
+  ...(options.scopes !== undefined && options.scopes.length > 0 ? { scopes: options.scopes } : {}),
+  ...(options.subject !== undefined && options.subject.length > 0
+    ? { subject: options.subject }
+    : {}),
+});
+
+const readKeyFile = (path: string) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    return yield* fs.readFileString(path).pipe(
+      Effect.flatMap(parseServiceAccountKey),
+      Effect.mapError((e) =>
+        AuthError.make({
+          message: `Failed to read service-account key at ${path}`,
+          cause: e,
+        }),
+      ),
+    );
+  });
+
+/**
+ * The service-account key named by the environment: `GOOGLE_CREDENTIALS`
+ * (the key JSON itself, or a path to it), else the
+ * `GOOGLE_APPLICATION_CREDENTIALS` path.
+ */
+export const serviceAccountKeyFromEnv = Effect.gen(function* () {
+  const credentials = yield* getEnvRedacted(GOOGLE_CREDENTIALS_ENV);
+  const inline = credentials !== undefined ? Redacted.value(credentials).trim() : "";
+  if (inline.startsWith("{")) {
+    return yield* parseServiceAccountKey(inline).pipe(
+      Effect.mapError(() =>
+        AuthError.make({
+          message: `${GOOGLE_CREDENTIALS_ENV} is not a valid service-account JSON key`,
+        }),
+      ),
+    );
+  }
+  if (inline.length > 0) {
+    return yield* readKeyFile(inline);
+  }
+  const keyPath = yield* getEnv(GOOGLE_APPLICATION_CREDENTIALS_ENV);
+  if (!keyPath) return undefined;
+  return yield* readKeyFile(keyPath);
+});
+
+const delegationFromEnv = Effect.gen(function* () {
+  const envScopes = yield* getEnv(GOOGLE_OAUTH_SCOPES_ENV);
+  const envSubject = yield* getEnv(GOOGLE_AUTH_SUBJECT_ENV);
+  return delegationOf({ scopes: parseScopes(envScopes), subject: envSubject?.trim() });
+});
+
 export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>()(
   GCP_AUTH_PROVIDER_NAME,
   Effect.gen(function* () {
     const store = yield* CredentialsStore;
     const fs = yield* FileSystem.FileSystem;
-    const readKeyFile = (path: string): Effect.Effect<ServiceAccountKey, AuthError> =>
-      fs.readFileString(path).pipe(
-        Effect.flatMap(parseServiceAccountKey),
-        Effect.mapError((e) =>
-          AuthError.make({
-            message: `Failed to read service-account key at ${path}`,
-            cause: e,
-          }),
-        ),
-      );
 
     // Minted tokens are cached by the `Credentials` layer until shortly
     // before `expiresAt` (see `lazyCredentials`), not here.
     const mint = (
       sa: ServiceAccountKey,
       project: string,
+      delegation: MintOptions,
     ): Effect.Effect<Omit<GcpResolvedCredentials, "region">, AuthError> =>
-      mintAccessToken(sa).pipe(
+      mintAccessToken(sa, delegation).pipe(
         Effect.map((minted) => ({
           type: "token" as const,
           accessToken: minted.accessToken,
@@ -119,14 +191,18 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
           expiresAt: minted.expirationMs,
           source: {
             type: "serviceAccount" as const,
-            details: sa.client_email,
+            details:
+              delegation.subject !== undefined
+                ? `${sa.client_email} as ${delegation.subject}`
+                : sa.client_email,
           },
         })),
       );
 
     const resolveFromServiceAccount = (
       sa: ServiceAccountKey,
-      explicitProject?: string,
+      explicitProject: string | undefined,
+      delegation: MintOptions,
     ): Effect.Effect<Omit<GcpResolvedCredentials, "region">, AuthError> => {
       const project = explicitProject ?? sa.project_id;
       if (!project) {
@@ -136,7 +212,7 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
           }),
         );
       }
-      return mint(sa, project);
+      return mint(sa, project, delegation);
     };
 
     const loginStored = Effect.fn(function* (profileName: string) {
@@ -251,6 +327,20 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
         label: "Path to service-account JSON",
         optional: true,
       },
+      {
+        name: "scopes",
+        label: "OAuth scopes",
+        description:
+          "Space- or comma-separated OAuth scopes for the minted token (default: cloud-platform)",
+        optional: true,
+      },
+      {
+        name: "subject",
+        label: "Delegation subject",
+        description:
+          "Workspace user the service account impersonates through domain-wide delegation",
+        optional: true,
+      },
       regionField,
     ];
 
@@ -279,9 +369,13 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
       }
       if (input.method === "serviceAccount") {
         const trimmed = (input.values.credentialsFile ?? "").trim();
+        const scopeList = parseScopes(input.values.scopes);
+        const subjectValue = (input.values.subject ?? "").trim();
         return Effect.succeed({
           method: "serviceAccount" as const,
           ...(trimmed.length > 0 ? { credentialsFile: trimmed } : {}),
+          ...(scopeList !== undefined ? { scopes: scopeList } : {}),
+          ...(subjectValue.length > 0 ? { subject: subjectValue } : {}),
           ...regionOf(input.values),
         });
       }
@@ -310,18 +404,19 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
             source: { type: "env" as const, details: GOOGLE_ACCESS_TOKEN_ENV },
           };
         }
-        const keyPath = yield* getEnv(GOOGLE_APPLICATION_CREDENTIALS_ENV);
-        if (!keyPath) {
+        const sa = yield* serviceAccountKeyFromEnv;
+        if (sa === undefined) {
           return yield* AuthError.make({
-            message: `GCP env credentials not found. Set ${GOOGLE_ACCESS_TOKEN_ENV}+${GOOGLE_PROJECT_ID_ENV} or ${GOOGLE_APPLICATION_CREDENTIALS_ENV}.`,
+            message: `GCP env credentials not found. Set ${GOOGLE_ACCESS_TOKEN_ENV}+${GOOGLE_PROJECT_ID_ENV}, ${GOOGLE_CREDENTIALS_ENV} or ${GOOGLE_APPLICATION_CREDENTIALS_ENV}.`,
           });
         }
-        const sa = yield* readKeyFile(keyPath);
-        return yield* resolveFromServiceAccount(sa, project);
-      });
+        const delegation = yield* delegationFromEnv;
+        return yield* resolveFromServiceAccount(sa, project, delegation);
+      }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
 
     const resolveFromServiceAccountFile = (
       credentialsFile: string | undefined,
+      delegation: MintOptions,
     ): Effect.Effect<Omit<GcpResolvedCredentials, "region">, AuthError> =>
       Effect.gen(function* () {
         const fromEnv = yield* getEnv(GOOGLE_APPLICATION_CREDENTIALS_ENV);
@@ -334,8 +429,8 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
         const sa = yield* readKeyFile(path);
         const project =
           (yield* getEnv(GOOGLE_PROJECT_ID_ENV)) ?? (yield* getEnv(GOOGLE_CLOUD_PROJECT_ENV));
-        return yield* resolveFromServiceAccount(sa, project);
-      });
+        return yield* resolveFromServiceAccount(sa, project, delegation);
+      }).pipe(Effect.provideService(FileSystem.FileSystem, fs));
 
     const resolveFromStored = (
       profileName: string,
@@ -362,7 +457,7 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
           };
         }
         const sa = yield* parseServiceAccountKey(creds.json);
-        return yield* resolveFromServiceAccount(sa, creds.project);
+        return yield* resolveFromServiceAccount(sa, creds.project, delegationOf(creds));
       });
 
     const resolveToken = (
@@ -373,7 +468,7 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
         case "env":
           return resolveFromEnv();
         case "serviceAccount":
-          return resolveFromServiceAccountFile(config.credentialsFile);
+          return resolveFromServiceAccountFile(config.credentialsFile, delegationOf(config));
         case "stored":
           return resolveFromStored(profileName);
       }
@@ -407,7 +502,9 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
       Match.value(config).pipe(
         Match.when({ method: "env" }, () => resolveFromEnv().pipe(Effect.as(config))),
         Match.when({ method: "serviceAccount" }, (cfg) =>
-          resolveFromServiceAccountFile(cfg.credentialsFile).pipe(Effect.as(cfg)),
+          resolveFromServiceAccountFile(cfg.credentialsFile, delegationOf(cfg)).pipe(
+            Effect.as(cfg),
+          ),
         ),
         Match.when({ method: "stored" }, () =>
           store
@@ -471,9 +568,27 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
           description: "Bearer access token (alternative to a service-account key).",
         },
         {
+          name: GOOGLE_CREDENTIALS_ENV,
+          required: false,
+          secret: true,
+          description: "Service-account JSON key, or a path to one.",
+        },
+        {
           name: GOOGLE_APPLICATION_CREDENTIALS_ENV,
           required: false,
           description: "Path to a service-account JSON key.",
+        },
+        {
+          name: GOOGLE_OAUTH_SCOPES_ENV,
+          required: false,
+          description:
+            "Space- or comma-separated OAuth scopes for tokens minted from a service-account key.",
+        },
+        {
+          name: GOOGLE_AUTH_SUBJECT_ENV,
+          required: false,
+          description:
+            "Workspace user a service account impersonates through domain-wide delegation.",
         },
         {
           name: GOOGLE_PROJECT_ID_ENV,
