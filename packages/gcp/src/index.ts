@@ -78,6 +78,7 @@ export * as Datastore from "./Datastore/index.ts";
 export * as Datastream from "./Datastream/index.ts";
 export * as DeveloperConnect from "./DeveloperConnect/index.ts";
 export * as Dialogflow from "./Dialogflow/index.ts";
+export * as Directory from "./Directory/index.ts";
 export * as DiscoveryEngine from "./DiscoveryEngine/index.ts";
 export * as DLP from "./DLP/index.ts";
 export * as DocumentAI from "./DocumentAI/index.ts";

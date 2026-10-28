@@ -100,6 +100,7 @@
     "./DeploymentManager": "./src/DeploymentManager/index.ts",
     "./DeveloperConnect": "./src/DeveloperConnect/index.ts",
     "./Dialogflow": "./src/Dialogflow/index.ts",
+    "./Directory": "./src/Directory/index.ts",
     "./DiscoveryEngine": "./src/DiscoveryEngine/index.ts",
     "./DLP": "./src/DLP/index.ts",
     "./DNS": "./src/DNS/index.ts",
@@ -558,6 +559,11 @@
         "types": "./lib/Dialogflow/index.d.ts",
         "bun": "./src/Dialogflow/index.ts",
         "default": "./lib/Dialogflow/index.js"
+      },
+      "./Directory": {
+        "types": "./lib/Directory/index.d.ts",
+        "bun": "./src/Directory/index.ts",
+        "default": "./lib/Directory/index.js"
       },
       "./DiscoveryEngine": {
         "types": "./lib/DiscoveryEngine/index.d.ts",
