@@ -75,13 +75,15 @@ jobs:
     # or just lost it. Label events for other labels are ignored. The job
     # then deploys the preview while the PR is open and labeled, and
     # destroys it otherwise (closed, or the label was removed).
+    # Only the upstream repository holds the bot and Cloudflare secrets.
     if: >-
-      github.event_name != 'pull_request' ||
+      github.repository == 'alchemy-run/alchemy' &&
+      (github.event_name != 'pull_request' ||
       (github.event.pull_request.head.repo.full_name == github.repository &&
        (contains(github.event.pull_request.labels.*.name, 'deploy-website') ||
         github.event.action == 'unlabeled') &&
        ((github.event.action != 'labeled' && github.event.action != 'unlabeled') ||
-        github.event.label.name == 'deploy-website'))
+        github.event.label.name == 'deploy-website')))
     runs-on: namespace-profile-linux-default
     permissions:
       contents: read

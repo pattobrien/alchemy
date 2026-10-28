@@ -47,8 +47,11 @@ concurrency:
 jobs:
   publish:
     name: Publish preview packages
+    # The registry only accepts publishes from the upstream repository.
     # `labeled` is only for `force-ci`, which repacks every package.
-    if: github.event.action != 'labeled' || github.event.label.name == 'force-ci'
+    if: >-
+      github.repository == 'alchemy-run/alchemy' &&
+      (github.event.action != 'labeled' || github.event.label.name == 'force-ci')
     runs-on: namespace-profile-linux-default
     steps:
       - name: Checkout repository
