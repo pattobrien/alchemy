@@ -3,6 +3,7 @@ import { Unowned } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import type { Providers } from "./Providers.ts";
 
@@ -65,7 +66,7 @@ export interface ProjectDomainAttributes {
   /** Redirect target, or `null`. */
   redirect: string | null;
   /** Redirect status code, or `null`. */
-  redirectStatusCode: number | null;
+  redirectStatusCode: RedirectStatusCode | null;
   /** Whether Vercel has verified the domain for this project. */
   verified: boolean;
   /** DNS challenges to complete while `verified` is `false`. */
@@ -130,6 +131,12 @@ export interface ProjectDomain extends Resource<
  */
 export const ProjectDomain = Resource<ProjectDomain>("Vercel.ProjectDomain");
 
+export class RedirectStatusCodeWithoutRedirect extends Data.TaggedError(
+  "RedirectStatusCodeWithoutRedirect",
+)<{
+  message: string;
+}> {}
+
 const getDomain = Effect.fn(function* (
   project: string,
   domain: string,
@@ -164,17 +171,22 @@ export const ProjectDomainProvider = () =>
     stables: ["name", "apexName", "projectId"],
     diff: Effect.fn(function* ({ olds, news }) {
       if (!isResolved(news)) return;
-      if (news.project !== olds.project || news.teamId !== olds.teamId || news.name !== olds.name) {
-        return { action: "replace" } as const;
+      if (news.name !== olds.name) return { action: "replace" } as const;
+      if (news.project !== olds.project || news.teamId !== olds.teamId) {
+        return { action: "replace", deleteFirst: true } as const;
       }
     }),
     read: Effect.fn(function* ({ olds, output }) {
       if (output) return yield* observeDomain(output.projectId, output.name, output.teamId);
-      if (!olds) return undefined;
       const attrs = yield* observeDomain(olds.project, olds.name, olds.teamId);
       return attrs && Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ news }) {
+      if (news.redirectStatusCode !== undefined && news.redirect === undefined) {
+        return yield* new RedirectStatusCodeWithoutRedirect({
+          message: `Vercel.ProjectDomain "${news.name}" sets redirectStatusCode without redirect; set redirect or remove redirectStatusCode`,
+        });
+      }
       let observed = yield* observeDomain(news.project, news.name, news.teamId);
       if (!observed) {
         yield* projects
@@ -184,7 +196,7 @@ export const ProjectDomainProvider = () =>
             name: news.name,
             gitBranch: news.gitBranch,
             redirect: news.redirect,
-            redirectStatusCode: news.redirect ? news.redirectStatusCode : undefined,
+            redirectStatusCode: news.redirectStatusCode,
           })
           .pipe(
             Effect.catchTag("Conflict", (error) =>

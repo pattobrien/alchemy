@@ -129,7 +129,7 @@ export const TeamProvider = () =>
       if (news.slug !== olds.slug) return { action: "replace" } as const;
     }),
     read: Effect.fn(function* ({ olds, output }) {
-      const teamId = output?.teamId ?? (yield* resolveTeamId(olds?.slug));
+      const teamId = output?.teamId ?? (yield* resolveTeamId(olds.slug));
       const attrs = yield* observeTeam(teamId);
       return output ? attrs : Unowned(attrs);
     }),

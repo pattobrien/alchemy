@@ -70,7 +70,7 @@ export interface ProjectAttributes {
   /** ID of the account (team) that owns the project. */
   accountId: string;
   /** Framework preset, or `null` when none is selected. */
-  framework: string | null;
+  framework: ProjectFramework | null;
   /** Source directory inside the repository, or `null` for the root. */
   rootDirectory: string | null;
   /** Connected Git repository, if any. */
@@ -197,8 +197,8 @@ export const ProjectProvider = () =>
     }),
     read: Effect.fn(function* ({ id, olds, output }) {
       if (output) return yield* observeProject(output.projectId, output.teamId);
-      const name = yield* projectName(id, olds?.name);
-      const attrs = yield* observeProject(name, olds?.teamId);
+      const name = yield* projectName(id, olds.name);
+      const attrs = yield* observeProject(name, olds.teamId);
       return attrs && Unowned(attrs);
     }),
     reconcile: Effect.fn(function* ({ id, news, output }) {
