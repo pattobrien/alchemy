@@ -39,6 +39,7 @@ function providersSidebarEntry() {
       { label: "Hetzner", link: "/hetzner" },
       { label: "Fly", link: "/fly" },
       { label: "Railway", link: "/railway" },
+      { label: "Vercel", link: "/vercel" },
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
@@ -1282,6 +1283,14 @@ export default defineConfig({
               ],
             },
             providerResourcesEntry("Railway"),
+          ],
+        },
+        {
+          label: "Vercel",
+          items: [
+            { label: "Overview", link: "/vercel" },
+            { label: "Setup", link: "/vercel/setup" },
+            providerResourcesEntry("Vercel"),
           ],
         },
         {

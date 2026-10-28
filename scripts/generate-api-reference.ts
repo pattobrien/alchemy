@@ -64,6 +64,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/axiom/src",
   },
   {
+    srcRoot: "packages/vercel/src",
+    providerPrefix: "Vercel",
+    sourceDisplayPrefix: "packages/vercel/src",
+  },
+  {
     srcRoot: "packages/doppler/src",
     providerPrefix: "Doppler",
     sourceDisplayPrefix: "packages/doppler/src",
