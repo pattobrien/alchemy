@@ -23,6 +23,7 @@ const packages = [
   "axiom",
   "vercel",
   "doppler",
+  "namespacelabs",
   "infisical",
   "turso",
   "planetscale",

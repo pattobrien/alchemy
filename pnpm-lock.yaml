@@ -9690,6 +9690,9 @@ importers:
       '@alchemy.run/kubernetes':
         specifier: workspace:*
         version: link:../kubernetes
+      '@alchemy.run/namespacelabs':
+        specifier: workspace:*
+        version: link:../namespacelabs
       '@alchemy.run/neon':
         specifier: workspace:*
         version: link:../neon
@@ -9765,6 +9768,9 @@ importers:
       '@distilled.cloud/inngest':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/inngest
+      '@distilled.cloud/namespacelabs':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/namespacelabs
       '@distilled.cloud/neon':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/neon
@@ -10087,6 +10093,28 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.0.5
+        version: 4.0.5
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/namespacelabs:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/namespacelabs':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/namespacelabs
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
       alchemy:
         specifier: workspace:*
         version: link:../alchemy

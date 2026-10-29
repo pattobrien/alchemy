@@ -25,6 +25,9 @@ upstream has not merged yet.
 - Fixes with open upstream PRs: `Artifacts.cached` completes its waiters on failure
   ([#1853](https://github.com/alchemy-run/alchemy/pull/1853)) and typed Stack stages
   ([#2131](https://github.com/alchemy-run/alchemy/pull/2131)).
+- The Namespace provider in `packages/namespacelabs`: `RunnerProfile`, `DevboxTemplate`, `Devbox`
+  and `Builder` on the fork's `@distilled.cloud/namespacelabs` SDK, with its `NamespaceLabs` auth
+  provider.
 - `submodules/distilled` points at [pattobrien/distilled](https://github.com/pattobrien/distilled).
 - The release workflow `.github/workflows/release-fork.yml` and `scripts/release/fork-publish.ts`.
 
