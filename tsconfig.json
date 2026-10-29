@@ -109,6 +109,9 @@
       "path": "./packages/doppler/tsconfig.json"
     },
     {
+      "path": "./packages/tailscale/tsconfig.json"
+    },
+    {
       "path": "./packages/infisical/tsconfig.json"
     },
     {

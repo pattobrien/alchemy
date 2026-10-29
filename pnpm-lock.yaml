@@ -9711,6 +9711,9 @@ importers:
       '@alchemy.run/stripe':
         specifier: workspace:*
         version: link:../stripe
+      '@alchemy.run/tailscale':
+        specifier: workspace:*
+        version: link:../tailscale
       '@alchemy.run/test':
         specifier: workspace:*
         version: link:../alchemy-test
@@ -9777,6 +9780,9 @@ importers:
       '@distilled.cloud/stripe':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/stripe
+      '@distilled.cloud/tailscale':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/tailscale
       '@distilled.cloud/turso':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/turso
@@ -10375,6 +10381,28 @@ importers:
       '@distilled.cloud/stripe':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/stripe
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.0.5
+        version: 4.0.5
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
+  packages/tailscale:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/tailscale':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/tailscale
     devDependencies:
       '@types/bun':
         specifier: 'catalog:'
@@ -11786,6 +11814,22 @@ importers:
         version: 26.6.5
 
   submodules/distilled/packages/surrealdb:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../core
+      effect:
+        specifier: 4.0.5
+        version: 4.0.5
+    devDependencies:
+      '@distilled.cloud/dev':
+        specifier: workspace:*
+        version: link:../dev
+      '@types/node':
+        specifier: 'catalog:'
+        version: 26.6.5
+
+  submodules/distilled/packages/tailscale:
     dependencies:
       '@distilled.cloud/core':
         specifier: workspace:*

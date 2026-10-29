@@ -17,6 +17,8 @@ upstream has not merged yet.
 - The Doppler resources in `packages/doppler`: `Project`, `Environment`, `Config`, `Secret`,
   `SecretNote`, `ProjectMember`, `ServiceAccount`, `ServiceAccountIdentity`,
   `ServiceAccountToken`, and `ServiceToken`, and a retried OIDC login in its `AuthProvider`.
+- The Tailscale provider in `packages/tailscale`: `Policy`, with an `AuthProvider` for API access
+  tokens and OAuth clients. Its tests are in `packages/integration-tests/test/Tailscale`.
 - `detectOidcToken` in `packages/alchemy/src/Auth/OidcToken.ts` fails when the GitHub Actions token
   request fails, so a caller can retry it.
 - `registry` credentials for a `Cloudflare.Container` pre-built `image`, passed to `Docker.image.pull`.
