@@ -67,8 +67,9 @@ export interface PolicyFinding {
 }
 
 /**
- * Tailscale refused the policy file during planning: it does not parse, or
- * one of its `tests` fails against its own rules.
+ * Tailscale refused the policy file: it does not parse, or one of its `tests`
+ * fails against its own rules. Raised while planning a changed body and, if
+ * the file changed underneath the plan, while writing it.
  */
 export class PolicyRejected extends Data.TaggedError("Tailscale.PolicyRejected")<{
   readonly message: string;
@@ -164,7 +165,13 @@ export const PolicyProvider = () =>
         output.eTag !== undefined &&
         output.eTag === live.eTag;
       if (unchanged) return attributes(tailnet, live);
-      const stored = yield* setPolicyFile({ tailnet, body: news.body, ifMatch: live.eTag });
+      const stored = yield* setPolicyFile({ tailnet, body: news.body, ifMatch: live.eTag }).pipe(
+        Effect.catchTag(
+          "PolicyFileRejected",
+          (error) =>
+            new PolicyRejected({ message: error.message, findings: error.body?.data ?? [] }),
+        ),
+      );
       return attributes(tailnet, stored);
     }),
 
