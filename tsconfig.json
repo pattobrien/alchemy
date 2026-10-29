@@ -112,6 +112,9 @@
       "path": "./packages/tailscale/tsconfig.json"
     },
     {
+      "path": "./packages/namespacelabs/tsconfig.json"
+    },
+    {
       "path": "./packages/infisical/tsconfig.json"
     },
     {

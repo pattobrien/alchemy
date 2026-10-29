@@ -109,6 +109,7 @@
     { "path": "../github/tsconfig.json" },
     { "path": "../doppler/tsconfig.json" },
     { "path": "../tailscale/tsconfig.json" },
+    { "path": "../namespacelabs/tsconfig.json" },
     { "path": "../stripe/tsconfig.json" },
     { "path": "../cloudflare/tsconfig.json" }
   ]
