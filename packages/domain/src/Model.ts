@@ -9,7 +9,14 @@ import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
 import { WorkflowEngine } from "effect/workflow";
 import * as Aggregate from "./Aggregate.ts";
-import * as Command from "./Command.ts";
+import * as CatchUp from "./CatchUp.ts";
+import type * as Command from "./Command.ts";
+import {
+  DefinitionError,
+  ForeignAppend,
+  LazyViewNeedsOneSource,
+  MissingWorkflowEngine,
+} from "./DefinitionError.ts";
 import { matches } from "./Filter.ts";
 import * as Kernel from "./Kernel.ts";
 import type * as Key from "./Key.ts";
@@ -17,6 +24,7 @@ import {
   type Accepted,
   type AggregateStore,
   type Delivery,
+  type ModelHost,
   Platform,
   type PolicyStore,
   type ProjectionStore,
@@ -85,10 +93,23 @@ export interface Members<
  * the Model provides; `Policies` is every policy and projection whose
  * implementation `layer` requires.
  */
-export interface ModelClass<Name extends string, Provided, Policies> {
+export interface ModelClass<
+  Name extends string,
+  Provided,
+  Policies,
+  Parts extends Servable = Servable,
+> {
   new (_: never): {};
   readonly kind: "Model";
   readonly modelName: Name;
+  /** The model's aggregates, in order. */
+  readonly aggregates: Parts["aggregates"];
+  /** Every command of the model's aggregates, each once. */
+  readonly commands: Parts["commands"];
+  /** The model's views, in order. */
+  readonly views: Parts["views"];
+  /** The model's streams, in order. */
+  readonly streams: Parts["streams"];
   readonly definitions: Kernel.Definitions;
   /**
    * Host every entity on the ambient {@link Platform}. The policy and
@@ -98,17 +119,42 @@ export interface ModelClass<Name extends string, Provided, Policies> {
    */
   layer<E = never, R = never>(
     handlers: Layer.Layer<Policies, E, R>,
-    options?: LayerOptions,
+    options?: LayerOptions<Parts["views"][number]["viewName"]>,
   ): Layer.Layer<Provided | Internals, E, Platform | Exclude<R, Provided>>;
 }
 
 /**
  * Structural constraint satisfied by every Model class.
  */
-export interface Any {
+export interface Any extends Servable {
   readonly kind: "Model";
   readonly modelName: string;
   readonly definitions: Kernel.Definitions;
+}
+
+/**
+ * What an Api over a model may serve, in the order the model lists them:
+ * its aggregates, their commands, its views and its streams. An Api names
+ * what it serves from these.
+ */
+export interface Servable {
+  readonly aggregates: ReadonlyArray<Aggregate.Any>;
+  /** Every command of the model's aggregates, each once. */
+  readonly commands: ReadonlyArray<Command.Any>;
+  readonly views: ReadonlyArray<View.Any>;
+  readonly streams: ReadonlyArray<DomainStream.Any>;
+}
+
+/** What a model's members serve. */
+export interface ServableBy<
+  A extends ReadonlyArray<Aggregate.Any>,
+  V extends ReadonlyArray<View.Any>,
+  S extends ReadonlyArray<DomainStream.Any>,
+> {
+  readonly aggregates: A;
+  readonly commands: ReadonlyArray<A[number]["definition"]["commands"][number]>;
+  readonly views: V;
+  readonly streams: S;
 }
 
 type ProvidedBy<
@@ -125,9 +171,27 @@ type ProvidedBy<
   | Projection.ProgressIdentifier<J[number]>;
 
 /** How a model's `layer` hosts it: tuning that doesn't change what the model means. */
-export interface LayerOptions {
+export interface LayerOptions<Views extends string = string> {
   /** What the hosted model records in traces. See {@link Telemetry.Options}. */
   readonly telemetry?: Telemetry.Options;
+  /**
+   * Before Domain version 0, models in one Worker that listed the same
+   * aggregate, view or saga shared its Durable Object class, and so its data.
+   * Each model now has classes of its own, and the first deploy moves the
+   * shared class to one of them. Set this on the model that keeps that data;
+   * the others start empty. The deploy fails until exactly one model sets it.
+   *
+   * @default false
+   */
+  readonly legacyData?: boolean;
+  /**
+   * Views that fill lazily when they are added. A deploy that adds one waits
+   * for nothing: each key reads its history the first time it is read (or when
+   * its source next changes). Only for a view that reads one aggregate and is
+   * keyed by it, so each key's history is its own instance's events. (Such a
+   * view is always rebuilt this way when its `version` is bumped.)
+   */
+  readonly lazy?: ReadonlyArray<Views>;
 }
 
 /** Every implementation a model's `layer` requires: its policies, projections and sagas. */
@@ -176,7 +240,7 @@ export const make = <
 >(
   name: Name,
   members: Members<A, V, P, J, S, G>,
-): ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G>> => {
+): ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G>, ServableBy<A, V, S>> => {
   const definitions: Kernel.Definitions = {
     aggregates: members.aggregates,
     views: members.views ?? [],
@@ -189,12 +253,31 @@ export const make = <
     static readonly modelName: Name = name;
     static readonly definitions: Kernel.Definitions = definitions;
     static readonly sagas: ReadonlyArray<Saga.Any> = members.sagas ?? [];
+    static readonly aggregates = definitions.aggregates;
+    static readonly commands = [
+      ...new Set(definitions.aggregates.flatMap((aggregate) => aggregate.definition.commands)),
+    ];
+    static readonly views = definitions.views;
+    static readonly streams = definitions.streams;
     static layer<E, R>(handlers: Layer.Layer<HandledBy<P, J, G>, E, R>, options?: LayerOptions) {
       return Layer.effectContext(
-        build(definitions, handlers, members.sagas ?? [], Telemetry.resolve(options?.telemetry)),
+        build(
+          name,
+          definitions,
+          handlers,
+          members.sagas ?? [],
+          Telemetry.resolve(options?.telemetry),
+          options?.legacyData ?? false,
+          options?.lazy ?? [],
+        ),
       );
     }
-  } as unknown as ModelClass<Name, ProvidedBy<A, V, J, S, G>, HandledBy<P, J, G>>;
+  } as unknown as ModelClass<
+    Name,
+    ProvidedBy<A, V, J, S, G>,
+    HandledBy<P, J, G>,
+    ServableBy<A, V, S>
+  >;
 };
 
 /**
@@ -268,13 +351,22 @@ const observeProjection =
   };
 
 const build = <A, E, R>(
+  modelName: string,
   definitions: Kernel.Definitions,
   policies: Layer.Layer<A, E, R>,
   sagas: ReadonlyArray<Saga.Any>,
   telemetry: Telemetry.Resolved,
+  legacyData: boolean,
+  lazy: ReadonlyArray<string>,
 ) =>
   Effect.gen(function* () {
-    const platform = yield* Platform;
+    // The model's own storage: models sharing a definition never share its data.
+    const platform = yield* (yield* Platform).model({
+      modelName,
+      id: definitions,
+      sagas: sagas.map((saga) => saga.workflow._tag),
+      legacyData,
+    });
     const kernel = yield* Kernel.make(definitions, telemetry);
 
     const aggregateStores = new Map<string, AggregateStore>();
@@ -296,19 +388,49 @@ const build = <A, E, R>(
     for (const aggregate of definitions.aggregates) {
       aggregateStores.set(
         aggregate.aggregateName,
-        yield* platform.aggregate(aggregate, {
-          ...kernel.aggregateKit(aggregate, deliver),
-          push: Watch.aggregatePush(kernel, aggregate),
-        }),
+        // Assigned, not spread: a kit's `targets` is read when used, once versions are set.
+        yield* platform.aggregate(
+          aggregate,
+          Object.assign(kernel.aggregateKit(aggregate, deliver), {
+            push: Watch.aggregatePush(kernel, aggregate),
+          }),
+        ),
       );
     }
+    const viewTarget = (name: string) => kernel.targetIdOf("view", name);
+    for (const name of lazy) {
+      if (!kernel.inPlace("view", name))
+        return yield* Effect.die(
+          new DefinitionError({ reason: new LazyViewNeedsOneSource({ view: name }) }),
+        );
+    }
+    // A view keyed by the one aggregate it reads fills each key itself, from its
+    // instance's events, before the key answers: when it is lazy, and when its
+    // version was bumped (it is rebuilt in place). The deploy runs no backfill for it.
+    const selfFilled = new Set(
+      definitions.views
+        .filter(
+          (view) =>
+            kernel.inPlace("view", view.viewName) &&
+            (lazy.includes(view.viewName) || kernel.generationOf("view", view.viewName) > 0),
+        )
+        .map((view) => view.viewName),
+    );
     for (const view of definitions.views) {
+      // Only a view that fills itself reads its keys' history on first touch; any
+      // other view is filled by the deploy's backfill, and its keys apply live.
+      const source = selfFilled.has(view.viewName)
+        ? kernel.sourcesOf(viewTarget(view.viewName))?.[0]
+        : undefined;
       viewStores.set(
         view.viewName,
-        yield* platform.view(view, {
-          ...kernel.viewKit(view, deliver),
-          push: Watch.viewPush(kernel, view),
-        }),
+        yield* platform.view(
+          view,
+          Object.assign(kernel.viewKit(view, deliver), {
+            push: Watch.viewPush(kernel, view),
+            ...(source === undefined ? {} : { catchUp: { source } }),
+          }),
+        ),
       );
     }
 
@@ -335,7 +457,15 @@ const build = <A, E, R>(
     }
     const viewHosts = new Map<string, View.Host<unknown, Key.Any, unknown>>();
     for (const view of definitions.views) {
-      const host = viewHost(kernel, view, viewStores.get(view.viewName)!);
+      const host = viewHost(
+        kernel,
+        view,
+        viewStores.get(view.viewName)!,
+        // Such a key reads its history before it answers: every answer has it all.
+        selfFilled.has(view.viewName)
+          ? Effect.succeed({ complete: true })
+          : history(platform, () => viewTarget(view.viewName)),
+      );
       viewHosts.set(view.viewName, host);
       hosts = Context.add(hosts, view, host);
     }
@@ -349,8 +479,17 @@ const build = <A, E, R>(
       hosts = Context.add(
         hosts,
         projection.Progress,
-        projectionProgress(kernel, projection, () =>
-          projectionStores.get(projection.projectionName)!,
+        projectionProgress(
+          kernel,
+          projection,
+          () => projectionStores.get(projection.projectionName)!,
+          history(platform, () =>
+            CatchUp.targetId({
+              kind: "projection",
+              name: projection.projectionName,
+              generation: kernel.generationOf("projection", projection.projectionName),
+            }),
+          ),
         ),
       );
     }
@@ -360,21 +499,30 @@ const build = <A, E, R>(
       const engine = yield* Effect.serviceOption(WorkflowEngine.WorkflowEngine);
       if (Option.isNone(engine)) {
         return yield* Effect.die(
-          new Kernel.DefinitionError(
-            `${sagas.map((saga) => saga.sagaName).join(", ")} need a platform that runs workflows`,
-          ),
+          new DefinitionError({
+            reason: new MissingWorkflowEngine({ sagas: sagas.map((saga) => saga.sagaName) }),
+          }),
         );
       }
-      for (const saga of sagas) hosts = Context.add(hosts, saga, Saga.client(saga, engine.value));
+      // The model's own runs: its sagas register and start under `<model>/<saga>`.
+      const modelEngine = Saga.engineFor(engine.value, modelName);
+      hosts = Context.add(hosts, WorkflowEngine.WorkflowEngine, modelEngine);
+      for (const saga of sagas) hosts = Context.add(hosts, saga, Saga.client(saga, modelEngine));
     }
 
     // Policies, projections and sagas are built with the clients available, then hosted.
     const implementations = yield* Layer.build(policies).pipe(Effect.provide(hosts));
-    for (const projection of definitions.projections) {
-      const implementation = Context.getUnsafe(
+    const implementationOf = (projection: Projection.Any) =>
+      Context.getUnsafe(
         implementations as Context.Context<unknown>,
         projection as Context.Key<unknown, Projection.Implementation<unknown>>,
       );
+    for (const projection of definitions.projections) {
+      const version = implementationOf(projection).options.version;
+      if (version) kernel.setVersion(`projection:${projection.projectionName}`, version);
+    }
+    for (const projection of definitions.projections) {
+      const implementation = implementationOf(projection);
       const writes = (projection.definition.writes ?? []).map((stream) =>
         streamStores.get(stream.streamName)!,
       );
@@ -383,12 +531,15 @@ const build = <A, E, R>(
         yield* platform.projection(projection, {
           name: projection.projectionName,
           options: { batch: Projection.batchMillis(implementation.options) },
+          generation: kernel.generationOf("projection", projection.projectionName),
+          singleSource: kernel.singleSource(`projection:${projection.projectionName}`),
+          history: kernel.history,
           run: (key, batch) =>
             Effect.gen(function* () {
               // Platforms run handlers inside their runtime (a Durable Object, or this process).
-              yield* implementation.handle(
-                kernel.projectionInputs(projection, key, batch),
-              ) as Effect.Effect<void>;
+              const inputs = yield* kernel.projectionInputs(projection, key, batch);
+              // oxlint-disable-next-line effecttsgo/unsafe-effect-type-assertion -- the platform runs handlers inside its runtime, which provides RuntimeContext
+              yield* implementation.handle(inputs) as Effect.Effect<void>;
               // What this run handled, so stream reads `atLeast` a receipt see it.
               if (writes.length === 0) return;
               const checkpoints: Record<string, number> = {};
@@ -415,6 +566,17 @@ const build = <A, E, R>(
         yield* platform.policy(policy, kernel.policyKit(policy, handler)),
       );
     }
+    // Every store is built: catch up the consumers that are new to the platform.
+    // Lazy views have no backfill: their keys catch up when read.
+    const lazyTargets = new Set([...selfFilled].map(viewTarget));
+    // Every consumer is in the model, so its sources route to it; those that fill
+    // themselves get no backfill.
+    if (platform.start)
+      yield* platform.start(
+        kernel.targets,
+        kernel.planOf,
+        kernel.targets.filter((target) => !lazyTargets.has(target)),
+      );
 
     return Context.add(hosts, Internals, {
       kernel,
@@ -473,7 +635,8 @@ const aggregateClient = (
         // The span records a rejection as an outcome; the caller still fails with it.
         const result = yield* Effect.gen(function* () {
           const { id, meta } = yield* metaFor(target, command, options, false);
-          const result = yield* store.send(id, kernel.encodeCommand(aggregate, command), meta);
+          const encoded = yield* kernel.encodeCommand(aggregate, command);
+          const result = yield* store.send(id, encoded, meta);
           yield* Effect.annotateCurrentSpan(
             "domain.outcome",
             result._tag === "Accepted"
@@ -489,7 +652,7 @@ const aggregateClient = (
         );
         return result._tag === "Rejected"
           ? yield* Effect.fail(kernel.decodeRejection(aggregate, result.rejection))
-          : kernel.decodeReceipt(aggregate, command._tag, result.receipt);
+          : yield* kernel.decodeReceipt(aggregate, command._tag, result.receipt);
       }),
     schedule: (target, command, options) =>
       Effect.gen(function* () {
@@ -497,7 +660,7 @@ const aggregateClient = (
         const { id, meta } = yield* metaFor(target, command, options, true);
         const at = yield* store.schedule(
           id,
-          kernel.encodeCommand(aggregate, command),
+          yield* kernel.encodeCommand(aggregate, command),
           meta,
           options.at !== undefined
             ? { at: DateTime.toEpochMillis(options.at) }
@@ -537,6 +700,7 @@ const viewHost = (
   kernel: Kernel.Kernel,
   view: View.Any,
   store: ViewStore,
+  history: Effect.Effect<View.History>,
 ): View.Host<unknown, Key.Any, unknown> => {
   const watch = (key: Key.RefOf<Key.Any>, options?: View.WatchOptions<unknown>) =>
     store.changes(Aggregate.targetId(key)).pipe(
@@ -600,18 +764,18 @@ const viewHost = (
           Duration.toMillis(Duration.fromInputUnsafe(options?.timeout ?? "10 seconds")) / 25,
         ),
       }),
-      Effect.mapError(
-        () =>
-          new View.ConsistencyTimeout({
-            view: view.viewName,
-            key: id,
-            stream: atLeast.stream,
-            version: atLeast.version,
-          }),
+      Effect.mapError(() =>
+        View.ConsistencyTimeout.make({
+          view: view.viewName,
+          key: id,
+          stream: atLeast.stream,
+          version: atLeast.version,
+        }),
       ),
     );
   };
   return {
+    history,
     query: (key, options) =>
       readAtLeast(Aggregate.targetId(key), options).pipe(
         Effect.map((snapshot) => decodeSnapshot(kernel, view, snapshot)),
@@ -621,7 +785,7 @@ const viewHost = (
       readAtLeast(Aggregate.targetId(key), options).pipe(
         Effect.map((snapshot) => ({
           state: Option.getOrNull(decodeSnapshot(kernel, view, snapshot)),
-          cursor: String(snapshot.seq),
+          cursor: snapshot.seq,
         })),
       ),
     waitFor: (key, where, options) =>
@@ -641,25 +805,30 @@ const viewHost = (
     watch,
     watchEach,
     events: (key, options) =>
-      store.tail(Aggregate.targetId(key), options?.after ? Number(options.after) : 0).pipe(
-        Stream.map((entry) => kernel.decodeViewEntry(view, entry)),
+      store.tail(Aggregate.targetId(key), options?.after ?? 0).pipe(
+        Stream.mapEffect((entry) => kernel.decodeViewEntry(view, entry)),
         Stream.filter((entry) => matches(options?.where, entry.event)),
       ),
     list: (key, options) =>
       store.list(Aggregate.targetId(key)).pipe(
-        Effect.map((stored) => {
+        Effect.flatMap((stored) => {
           const desc = options?.order === "desc";
-          const after = options?.after === undefined ? undefined : Number(options.after);
-          const rows = (desc ? [...stored].reverse() : stored)
-            .filter((row) => after === undefined || (desc ? row.seq < after : row.seq > after))
-            .map((row) => ({ seq: row.seq, entry: kernel.decodeViewEntry(view, row) }))
-            .filter((row) => matches(options?.where, row.entry.event));
+          const after = options?.after;
+          return Effect.forEach(
+            (desc ? [...stored].reverse() : stored).filter(
+              (row) => after === undefined || (desc ? row.seq < after : row.seq > after),
+            ),
+            (row) =>
+              Effect.map(kernel.decodeViewEntry(view, row), (entry) => ({ seq: row.seq, entry })),
+          );
+        }),
+        Effect.map((decoded) => {
+          const rows = decoded.filter((row) => matches(options?.where, row.entry.event));
           const take = options?.take ?? rows.length;
           const page = rows.slice(0, take);
           return {
             entries: page.map((row) => row.entry),
-            cursor:
-              rows.length > take && page.length > 0 ? String(page[page.length - 1]!.seq) : null,
+            cursor: rows.length > take && page.length > 0 ? page[page.length - 1]!.seq : null,
           };
         }),
       ),
@@ -688,10 +857,17 @@ const streamHost = (
   const decode = (entry: StreamEntry) => kernel.decodeStreamEntry(entry);
   const latest = (key: string, meta: StreamMeta) =>
     meta.seq === 0
-      ? Effect.succeed(Option.none())
-      : store
-          .tail(key, meta.seq - 1)
-          .pipe(Stream.take(1), Stream.runHead, Effect.map(Option.map(decode)));
+      ? Effect.succeedNone
+      : store.tail(key, meta.seq - 1).pipe(
+          Stream.take(1),
+          Stream.runHead,
+          Effect.flatMap(
+            Option.match({
+              onNone: () => Effect.succeedNone,
+              onSome: (entry) => Effect.asSome(decode(entry)),
+            }),
+          ),
+        );
   return {
     peek: (key, options) => {
       const atLeast = options?.atLeast;
@@ -708,7 +884,7 @@ const streamHost = (
               ),
             options?.timeout,
             () =>
-              new View.ConsistencyTimeout({
+              View.ConsistencyTimeout.make({
                 view: stream.streamName,
                 key: Aggregate.targetId(key),
                 stream: atLeast.stream,
@@ -725,24 +901,28 @@ const streamHost = (
       ),
     events: (key, options) =>
       store.tail(Aggregate.targetId(key), options?.after ?? 0).pipe(
-        Stream.map(decode),
+        Stream.mapEffect(decode),
         Stream.filter((entry) => matches(options?.where, entry.event)),
       ),
     list: (key, options) =>
       store.list(Aggregate.targetId(key)).pipe(
-        Effect.map((stored) => {
+        Effect.flatMap((stored) => {
           const desc = options?.order === "desc";
-          const after = options?.after === undefined ? undefined : Number(options.after);
-          const rows = (desc ? [...stored].reverse() : stored)
-            .filter((row) => after === undefined || (desc ? row.seq < after : row.seq > after))
-            .map((row) => ({ seq: row.seq, entry: decode(row) }))
-            .filter((row) => matches(options?.where, row.entry.event));
+          const after = options?.after;
+          return Effect.forEach(
+            (desc ? [...stored].reverse() : stored).filter(
+              (row) => after === undefined || (desc ? row.seq < after : row.seq > after),
+            ),
+            (row) => Effect.map(decode(row), (entry) => ({ seq: row.seq, entry })),
+          );
+        }),
+        Effect.map((decoded) => {
+          const rows = decoded.filter((row) => matches(options?.where, row.entry.event));
           const take = options?.take ?? rows.length;
           const page = rows.slice(0, take);
           return {
             entries: page.map((row) => row.entry),
-            cursor:
-              rows.length > take && page.length > 0 ? String(page[page.length - 1]!.seq) : null,
+            cursor: rows.length > take && page.length > 0 ? page[page.length - 1]!.seq : null,
           };
         }),
       ),
@@ -754,29 +934,44 @@ const streamHost = (
         const writer = kernel.writerOf(stream);
         if (!meta || !writer || writer.projectionName !== meta.projection) {
           return Effect.die(
-            new Kernel.DefinitionError(
-              `Only the projection that lists ${stream.streamName} in \`writes\` may append to it, with the input it is handling`,
-            ),
+            new DefinitionError({ reason: new ForeignAppend({ stream: stream.streamName }) }),
           );
         }
         meta.appends += 1;
-        return store.append(meta.key, {
-          origin: [meta.position, meta.appends],
-          source: meta.source,
-          sourceSeq: meta.sourceSeq,
-          at: meta.at,
-          commandId: meta.commandId,
-          events: events.map((event) => kernel.encodeEvent(event as { readonly _tag: string })),
-        });
+        const position: [number, number] = [meta.position, meta.appends];
+        return Effect.forEach(events, (event) =>
+          kernel.encodeEvent(event as { readonly _tag: string }),
+        ).pipe(
+          Effect.flatMap((encoded) =>
+            store.append(meta.key, {
+              origin: position,
+              source: meta.source,
+              sourceSeq: meta.sourceSeq,
+              at: meta.at,
+              commandId: meta.commandId,
+              events: encoded,
+            }),
+          ),
+        );
       }),
   };
 };
+
+/** How much history has reached a consumer, as the platform reports it. */
+const history = (platform: ModelHost, target: () => string): Effect.Effect<View.History> =>
+  Effect.suspend(() =>
+    platform.history
+      ? Effect.map(platform.history(target()), ({ complete }) => ({ complete }))
+      : Effect.succeed({ complete: true }),
+  );
 
 const projectionProgress = (
   kernel: Kernel.Kernel,
   projection: Projection.Any,
   store: () => ProjectionStore,
+  history: Effect.Effect<View.History>,
 ): Projection.Progress => ({
+  history,
   caughtUp: (receipt, options) =>
     Effect.gen(function* () {
       const [aggregate, ...rest] = receipt.stream.split("/");
@@ -809,7 +1004,7 @@ const projectionProgress = (
               ),
             options?.timeout,
             () =>
-              new View.ConsistencyTimeout({
+              View.ConsistencyTimeout.make({
                 view: projection.projectionName,
                 key,
                 stream: receipt.stream,

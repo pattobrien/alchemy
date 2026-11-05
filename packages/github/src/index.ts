@@ -13,7 +13,7 @@ export {
 } from "./Browser.ts";
 export * from "./Collaborator.ts";
 export * from "./Comment.ts";
-export { GitHubCredentials, fromEnv, fromToken } from "./Credentials.ts";
+export { Credentials, fromEnv, fromToken } from "./Credentials.ts";
 export * from "./DependabotSecret.ts";
 export * from "./Env.ts";
 export * from "./Environment.ts";
@@ -41,7 +41,7 @@ export * from "./WikiPage.ts";
 export * from "./Milestone.ts";
 export * from "./Issue.ts";
 export * from "./RepositoryEventSourceLive.ts";
-export * from "./ApiError.ts";
+export * from "./Errors.ts";
 export * from "./PersonalAccessToken.ts";
 export * from "./CreateIssue.ts";
 export * from "./CreateIssueHttp.ts";

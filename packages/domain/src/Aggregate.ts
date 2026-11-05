@@ -8,8 +8,9 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Schema from "effect/Schema";
 import type * as Command from "./Command.ts";
+import { DefinitionError, UnhandledCommand } from "./DefinitionError.ts";
 import type * as Event from "./Event.ts";
-import { DefinitionError, judge, settle, targetId as internalTargetId } from "./internal.ts";
+import { judge, settle, targetId as internalTargetId } from "./internal.ts";
 import type * as Middleware from "./Middleware.ts";
 import type * as Read from "./Read.ts";
 import type * as Rejection from "./Rejection.ts";
@@ -28,30 +29,40 @@ export type InstanceOf<C> = C extends abstract new (...args: any[]) => infer I ?
 export interface DecideContext<Id> {
   /** The id of the aggregate instance handling the command. */
   readonly id: Id;
+  /** The id the command was sent with; its events' envelopes carry it too. */
+  readonly commandId: string;
+  /** The stream the command's events commit to, e.g. `Account/a-1`. */
+  readonly stream: string;
+  /** The stream's version before this decision: `0` for a new instance. */
+  readonly version: number;
   /** The time the command is being handled. Controlled by stories via `clock`. */
   readonly now: DateTime.Utc;
 }
 
 /**
- * Metadata recorded with every committed event.
+ * Metadata recorded with every committed event. Its schema is what Api clients
+ * decode, so the wire carries every field.
  */
-export interface Envelope<Id = string> {
+export const Envelope = Schema.Struct({
   /** The id of the aggregate instance that committed the event. */
-  readonly id: Id;
+  id: Schema.String,
   /** The stream the event belongs to, e.g. `Account/a-1`. */
-  readonly stream: string;
+  stream: Schema.String,
   /** The event's sequence number within its stream, starting at 1. */
-  readonly seq: number;
+  seq: Schema.Number,
   /** The commit time. */
-  readonly at: DateTime.Utc;
+  at: Schema.DateTimeUtc,
   /** The id of the command that produced the event. */
-  readonly commandId: string;
+  commandId: Schema.String,
   /**
    * The id of the first command in the chain that led here: the same for a
    * command, the events it records, and every reaction and command they cause.
    */
-  readonly correlationId: string;
-}
+  correlationId: Schema.String,
+});
+
+/** An {@link Envelope} whose `id` is the aggregate's (branded) id. */
+export type Envelope<Id = string> = typeof Envelope.Type & { readonly id: Id };
 
 /**
  * The outcome of a successfully handled command.
@@ -393,9 +404,9 @@ interface PredictBase<Id> {
   readonly id: Id;
   /** The time the command is decided at (the server stamps commands with its clock). */
   readonly now: DateTime.Utc;
-  /** The state's version: predicted envelopes continue from it. Defaults to `0`. */
+  /** The state's version: `decide` sees it, and predicted envelopes continue from it. Defaults to `0`. */
   readonly version?: number;
-  /** The id the command will be sent with, for the predicted envelopes. Defaults to `""`. */
+  /** The id the command will be sent with, for `decide` and the predicted envelopes. Defaults to `""`. */
   readonly commandId?: string;
   /** Defaults to the command id. */
   readonly correlationId?: string;
@@ -434,8 +445,8 @@ export const predict = (
   aggregate: Any,
   state: unknown,
   command: { readonly _tag: string },
-  options: PredictOptions<unknown>,
-): Prediction<unknown, { readonly _tag: string }, { readonly _tag: string }, unknown> => {
+  options: PredictOptions,
+): Prediction<unknown, { readonly _tag: string }, { readonly _tag: string }> => {
   const def = aggregate.definition;
   const cls = def.commands.find((c) => c.tag === command._tag);
   const decide = def.decide[command._tag] as
@@ -445,19 +456,30 @@ export const predict = (
     return {
       _tag: "Unpredictable",
       cause: Cause.die(
-        new DefinitionError(`${aggregate.aggregateName} does not handle '${command._tag}'`),
+        new DefinitionError({
+          reason: new UnhandledCommand({
+            aggregate: aggregate.aggregateName,
+            command: command._tag,
+          }),
+        }),
       ),
     };
   }
-  let decision = decide(state, command, { id: options.id, now: options.now });
+  const version = options.version ?? 0;
+  const commandId = options.commandId ?? "";
+  const stream = `${aggregate.aggregateName}/${String(options.id)}`;
+  let decision = decide(state, command, {
+    id: options.id,
+    now: options.now,
+    commandId,
+    stream,
+    version,
+  });
   if (Effect.isEffect(decision)) {
-    const settled = settle(
-      Effect.runSyncExit(
-        Effect.provideContext(
-          decision as Effect.Effect<unknown, unknown, never>,
-          (options.context ?? Context.empty()) as Context.Context<never>,
-        ),
-      ),
+    const settled = decision.pipe(
+      Effect.provideContext((options.context ?? Context.empty()) as Context.Context<unknown>),
+      Effect.runSyncExit,
+      settle,
     );
     if (settled._tag === "Failed") return { _tag: "Unpredictable", cause: settled.cause };
     decision = settled.decision;
@@ -466,14 +488,12 @@ export const predict = (
   if (judged._tag === "Undeclared")
     return { _tag: "Unpredictable", cause: Cause.die(judged.error) };
   if (judged._tag === "Rejected") return judged;
-  const version = options.version ?? 0;
-  const commandId = options.commandId ?? "";
-  const envelopes: Array<Envelope<unknown>> = [];
+  const envelopes: Array<Envelope> = [];
   let next = state;
   judged.events.forEach((event, index) => {
-    const envelope: Envelope<unknown> = {
+    const envelope: Envelope = {
       id: options.id,
-      stream: `${aggregate.aggregateName}/${String(options.id)}`,
+      stream,
       seq: version + index + 1,
       at: options.now,
       commandId,
@@ -673,23 +693,27 @@ export const make = <
   const C extends ReadonlyArray<Command.Any>,
   const Ms extends Middleware.List = readonly [],
   const Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
+  // The declared `read`, inferred apart from `Definition` so the type records it.
+  // Its constraint carries no members, so it never narrows how `read` is typed.
+  const R extends object | undefined = object | undefined,
 >(
   name: Name,
-  definition: Definition<Id, S, C, Ms, Rejects> & TargetsMatch<Id, C>,
-): AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>> => {
-  const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects>>>()(
+  definition: Definition<Id, S, C, Ms, Rejects> & TargetsMatch<Id, C> & { readonly read?: R },
+): AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>> => {
+  const Tag = Context.Service<Key<Name>, Client<Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>>>()(
     `alchemy/Domain/Aggregate/${name}`,
   );
+  // oxlint-disable-next-line effecttsgo/schema-sync -- ids decode synchronously when building refs
   const decodeId = Schema.decodeUnknownSync(
     definition.id as unknown as Schema.Codec<unknown, unknown>,
   );
   return class extends Tag {
     static readonly kind = "Aggregate" as const;
     static readonly aggregateName: Name = name;
-    static readonly definition: Resolved<Id, S, C, Ms, Rejects> = {
+    static readonly definition: Resolved<Id, S, C, Ms, Rejects, ReadOf<R>> = {
       ...definition,
       events: [...new Set(definition.commands.flatMap((command) => command.events))],
-    } as unknown as Resolved<Id, S, C, Ms, Rejects>;
+    } as unknown as Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>;
     /** Address one instance of this aggregate. */
     static ref<Self extends Any>(this: Self, id: Self["definition"]["id"]["Encoded"]): Ref<Self> {
       return makeRef(this, decodeId(id) as IdOf<Self>);
@@ -699,11 +723,11 @@ export const make = <
       this: Any,
       state: unknown,
       command: { readonly _tag: string },
-      options: PredictOptions<unknown>,
+      options: PredictOptions,
     ) {
       return predict(this, state, command, options);
     }
-  } as unknown as AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects>>;
+  } as unknown as AggregateClass<Name, Resolved<Id, S, C, Ms, Rejects, ReadOf<R>>>;
 };
 
 /**
@@ -727,14 +751,30 @@ export type TargetsMatch<Id extends IdSchema, C extends ReadonlyArray<Command.An
   readonly commands: { readonly [K in keyof C]: CheckTarget<Id, C[K]> };
 };
 
-/** A definition with its events collected from its commands. */
+/**
+ * The `read` an aggregate declared, or `undefined`. With none declared, `R`
+ * is left at its default, which includes `undefined`; a declared contract
+ * never does.
+ */
+type ReadOf<R> = undefined extends R ? undefined : R;
+
+/**
+ * A definition with its events collected from its commands. `R` is the
+ * `read` it declared, or `undefined`: an aggregate that declares one has a
+ * required `read` in its type, so an Api can tell which aggregates it may
+ * serve.
+ */
 export type Resolved<
   Id extends IdSchema,
   S extends Schema.Top,
   C extends ReadonlyArray<Command.Any>,
   Ms extends Middleware.List = readonly [],
   Rejects extends ReadonlyArray<Rejection.Any> = readonly [],
-> = Definition<Id, S, C, Ms, Rejects> & { readonly events: ReadonlyArray<EventsOf<C>> };
+  R extends Read.AnyContract | undefined = Read.AnyContract | undefined,
+> = Definition<Id, S, C, Ms, Rejects> & {
+  readonly events: ReadonlyArray<EventsOf<C>>;
+  readonly read: R;
+};
 
 /**
  * The class type returned by {@link make}.

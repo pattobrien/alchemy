@@ -330,7 +330,7 @@ export const McpServerProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 
@@ -341,14 +341,18 @@ export const McpServerProvider = () =>
         // A failed create can leave props with an invalid ID but no output.
         // That generation cannot exist; let destroy recover the saved state.
         Effect.catchTag("McpServerInvalidId", (error) =>
-          output === undefined ? Effect.succeed(undefined) : Effect.fail(error),
+          output === undefined ? Effect.undefined : Effect.fail(error),
         ),
       );
       if (!observed) return undefined;
       const attrs = toAttributes(observed, acct);
       // MCP servers carry no ownership tags. An ID match alone does not
-      // authorize taking over a server when the stack has no saved output.
-      return output === undefined ? Unowned(attrs) : attrs;
+      // authorize taking over a server when the stack has no saved output,
+      // unless it is the generation a replacement is replacing.
+      return output === undefined &&
+        !(previous?.serverId === observed.id && previous.accountId === acct)
+        ? Unowned(attrs)
+        : attrs;
     }),
 
     reconcile: Effect.fn(function* ({ id, news, olds, output }) {
@@ -455,7 +459,7 @@ type ObservedServer = zeroTrust.ReadAccessAiControlMcpServerResponse;
 const observeServer = (accountId: string, id: string) =>
   zeroTrust
     .readAccessAiControlMcpServer({ accountId, id })
-    .pipe(Effect.catchTag("McpServerNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("McpServerNotFound", () => Effect.undefined));
 
 const createServerId = (id: string, serverId: string | undefined) =>
   Effect.gen(function* () {

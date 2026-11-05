@@ -1,8 +1,8 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import * as RpcWebSocketClient from "@alchemy.run/cloudflare/Workers/RpcWebSocketClient";
 import { describe, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Alchemy from "alchemy";
-import * as Test from "alchemy/Test/Alchemy";
 import type { Done, TimeoutError } from "effect/Cause";
 import * as Context from "effect/Context";
 import * as Data from "effect/Data";
@@ -172,8 +172,8 @@ const readStats = Effect.fn(function* (url: string) {
 }, Effect.timeout("15 seconds"));
 
 describe.concurrent.each([
-  { dev: true, stage: "rpc-websocket-local" },
-  { dev: false, stage: "rpc-websocket-live" },
+  { dev: true, stage: `${Test.defaultStage()}-rpc-websocket-local` },
+  { dev: false, stage: `${Test.defaultStage()}-rpc-websocket-live` },
 ])(
   "WebSocket RPC (dev: $dev)",
   ({ dev, stage }) => {

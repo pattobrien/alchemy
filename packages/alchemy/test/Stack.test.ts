@@ -1,4 +1,8 @@
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import type { TestApi as BunTestApi } from "@alchemy.run/test/Bun";
+import * as TestCore from "@alchemy.run/test/Core";
+import type { TestApi as VitestTestApi } from "@alchemy.run/test/Vitest";
 import * as Cause from "effect/Cause";
 import type { ConfigError } from "effect/Config";
 import * as Config from "effect/Config";
@@ -12,10 +16,6 @@ import * as Output from "@/Output.ts";
 import * as Plan from "@/Plan.ts";
 import { Stage } from "@/Stage.ts";
 import * as State from "@/State/index.ts";
-import * as Test from "@/Test/Alchemy.ts";
-import type { TestApi as BunTestApi } from "@/Test/Bun.ts";
-import * as TestCore from "@/Test/Core.ts";
-import type { TestApi as VitestTestApi } from "@/Test/Vitest.ts";
 import { TestLayers, TestResource } from "./test.resources.ts";
 
 // These tests are compile-time assertions: they verify that the
@@ -115,6 +115,31 @@ describe("Alchemy.Stack stage references", { tags: ["unit", "local"] }, () => {
       Effect.flatMap((expr) => Output.evaluate(expr, {})),
       Effect.provide(state),
     );
+
+  it.effect("stage[name] resolves a declared stage's output", () =>
+    Effect.gen(function* () {
+      class StagedStack extends Alchemy.Stack<
+        StagedStack,
+        { value: string },
+        "prod" | `pr-${number}`
+      >()("StagedStack") {}
+
+      expect(yield* resolve(StagedStack.stage.prod)).toEqual({ value: "prod" });
+      expect(yield* resolve(StagedStack.stage["pr-42"])).toEqual({ value: "pr-42" });
+    }),
+  );
+
+  it.effect("stage[name] resolves on the inline class reference form", () =>
+    Effect.gen(function* () {
+      class InlineStagedStack extends Alchemy.Stack<InlineStagedStack>()(
+        "InlineStagedStack",
+        { providers: Layer.empty, state: State.inMemoryState() },
+        Effect.succeed({ value: "dev" }),
+      ) {}
+
+      expect(yield* resolve(InlineStagedStack.stage.dev)).toEqual({ value: "dev" });
+    }),
+  );
 
   it.effect("at(stage) resolves the same stack output as stage[name]", () =>
     Effect.gen(function* () {

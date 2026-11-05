@@ -1,7 +1,7 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { isLocalId } from "@alchemy.run/cloudflare/LocalRuntime";
 import { describe, expect } from "@alchemy.run/test";
-import * as Test from "alchemy/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
 import { MinimumLogLevel } from "effect/References";
@@ -78,7 +78,7 @@ describe.concurrent(
 
           yield* stack.destroy();
         }).pipe(logLevel),
-      { timeout: 300_000 },
+      { timeout: 300_000, tags: ["provider:cloudflare", "provider:cloudflare:website", "local"] },
     );
 
     // alchemy-run/alchemy#2231: tail consumers were dropped on the source
@@ -146,7 +146,7 @@ describe.concurrent(
 
           yield* stack.destroy();
         }).pipe(logLevel),
-      { timeout: 300_000 },
+      { timeout: 300_000, tags: ["provider:cloudflare", "provider:cloudflare:website", "local"] },
     );
   },
 );

@@ -8,16 +8,10 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { githubWebOrigin } from "./BaseUrl.ts";
+import { effectiveGitHubBaseUrl, githubWebOrigin } from "./BaseUrl.ts";
 import type { GitHubBrowser, GitHubBrowserError } from "./Browser.ts";
 import { manualStep, pollUntilDefined, withBrowser } from "./ManualStep.ts";
-import {
-  appOctokit,
-  effectiveGitHubBaseUrl,
-  octokitFor,
-  retryFreshAppKey,
-  unlessStatus,
-} from "./Octokit.ts";
+import { appOctokit, octokitFor, retryFreshAppKey, unlessStatus } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 import {
   acceptInstallationPermissions,

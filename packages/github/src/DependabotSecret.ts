@@ -3,7 +3,8 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { gitHubBaseUrlChanged, octokitFor, unlessStatus } from "./Octokit.ts";
+import { gitHubBaseUrlChanged } from "./BaseUrl.ts";
+import { octokitFor, unlessStatus } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 import { encryptValue } from "./Secret.ts";
 

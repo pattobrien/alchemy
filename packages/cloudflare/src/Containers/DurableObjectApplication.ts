@@ -103,7 +103,11 @@ export const retryNamespacePropagation = <A, E extends { readonly _tag: string }
         : Effect.void,
     ),
     Effect.retry({
-      while: (error) => error._tag === "DurableObjectNamespaceNotFound",
+      // Cloudflare also refuses creates for a moment ("can't create
+      // application at this time"); the same request succeeds when retried.
+      while: (error) =>
+        error._tag === "DurableObjectNamespaceNotFound" ||
+        error._tag === "ContainerApplicationCreateUnavailable",
       schedule: Schedule.spaced("2 seconds"),
       times: 15,
     }),
@@ -282,7 +286,7 @@ export const LiveDurableObjectApplicationProvider = () =>
       // 1. Observe. The namespace belongs to this stack's Worker, so an
       //    application already attached to it is this class's application.
       let application = yield* getApplication.pipe(
-        Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+        Effect.catchTag("ContainerApplicationNotFound", () => Effect.undefined),
       );
 
       // 2. Ensure
@@ -333,7 +337,7 @@ export const LiveDurableObjectApplicationProvider = () =>
           applicationId: output.applicationId,
         }).pipe(
           Effect.map((application) => toAttributes(application, className, output.settings)),
-          Effect.catchTag("ContainerApplicationNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("ContainerApplicationNotFound", () => Effect.undefined),
         );
       }
       // Generated names identify this instance, so a match is ours.

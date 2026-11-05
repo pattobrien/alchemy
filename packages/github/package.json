@@ -1,6 +1,6 @@
 {
   "name": "@alchemy.run/github",
-  "version": "2.0.0-beta.84",
+  "version": "2.0.0-beta.85",
   "description": "GitHub repositories, secrets and webhooks for Alchemy.",
   "keywords": [
     "alchemy",
@@ -53,8 +53,9 @@
     "build:package": "node scripts/build.ts"
   },
   "dependencies": {
+    "@distilled.cloud/core": "workspace:*",
+    "@distilled.cloud/github": "workspace:*",
     "@octokit/rest": "catalog:",
-    "@octokit/webhooks": "catalog:",
     "libsodium-wrappers": "catalog:"
   },
   "devDependencies": {

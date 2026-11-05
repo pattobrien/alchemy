@@ -13,8 +13,9 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { githubWebOrigin } from "./BaseUrl.ts";
+import { effectiveGitHubBaseUrl } from "./BaseUrl.ts";
 import { manualStep, pollUntilDefined, withBrowser } from "./ManualStep.ts";
-import { appOctokit, effectiveGitHubBaseUrl, octokitFor, unlessStatus } from "./Octokit.ts";
+import { appOctokit, octokitFor, unlessStatus } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 import {
   appGeneralSettingsFormDrift,

@@ -18,9 +18,6 @@
   "references": [
     { "path": "../../submodules/distilled/packages/core/tsconfig.json" },
     { "path": "../../submodules/distilled/packages/inngest/tsconfig.json" },
-    { "path": "../../submodules/distilled/packages/linear/tsconfig.json" },
-    {
-      "path": "../alchemy-test/tsconfig.json"
-    }
+    { "path": "../../submodules/distilled/packages/linear/tsconfig.json" }
   ]
 }

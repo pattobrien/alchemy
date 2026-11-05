@@ -1,6 +1,6 @@
 import * as b2bi from "@distilled.cloud/aws/b2bi";
 import * as logs from "@distilled.cloud/aws/cloudwatch-logs";
-import { Unowned } from "alchemy/AdoptPolicy";
+import { unownedUnlessPrevious } from "alchemy/AdoptPolicy";
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
@@ -123,10 +123,8 @@ export const ProfileProvider = () =>
             head._tag === "Some"
               ? b2bi
                   .getProfile({ profileId: head.value.profileId })
-                  .pipe(
-                    Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
-                  )
-              : Effect.succeed(undefined),
+                  .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
+              : Effect.undefined,
           ),
         );
 
@@ -143,16 +141,18 @@ export const ProfileProvider = () =>
           }
         }),
 
-        read: Effect.fn(function* ({ id, olds, output }) {
+        read: Effect.fn(function* ({ id, olds, output, previous }) {
           const found = output?.profileId
             ? yield* b2bi
                 .getProfile({ profileId: output.profileId })
-                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
             : yield* findByName(olds?.name ?? "");
           if (found === undefined) return undefined;
           const attrs = toAttrs(found);
           const tags = yield* readB2biTags(attrs.profileArn);
-          return (yield* hasAlchemyTags(id, tags)) ? attrs : Unowned(attrs);
+          return (yield* hasAlchemyTags(id, tags))
+            ? attrs
+            : unownedUnlessPrevious(attrs, previous, "profileId");
         }),
 
         reconcile: Effect.fn(function* ({ id, news, output, session }) {
@@ -163,7 +163,7 @@ export const ProfileProvider = () =>
           let live = output?.profileId
             ? yield* b2bi
                 .getProfile({ profileId: output.profileId })
-                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)))
+                .pipe(Effect.catchTag("ResourceNotFoundException", () => Effect.undefined))
             : yield* findByName(news.name);
 
           // 2. Ensure — create if missing.
@@ -233,7 +233,7 @@ export const ProfileProvider = () =>
             Stream.mapEffect((s) =>
               b2bi.getProfile({ profileId: s.profileId }).pipe(
                 Effect.map(toAttrs),
-                Effect.catchTag("ResourceNotFoundException", () => Effect.succeed(undefined)),
+                Effect.catchTag("ResourceNotFoundException", () => Effect.undefined),
               ),
             ),
             Stream.filter((item) => item !== undefined),

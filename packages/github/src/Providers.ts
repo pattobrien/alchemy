@@ -1,3 +1,4 @@
+import { GraphQLLive } from "@distilled.cloud/github/GraphQL";
 import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
 import { ProfileStoreLive } from "alchemy/Auth/Profile";
 import * as Provider from "alchemy/Provider";
@@ -28,7 +29,7 @@ import { Variable, VariableProvider } from "./Variable.ts";
 import { Webhook, WebhookProvider } from "./Webhook.ts";
 import { WikiPage, WikiPageProvider } from "./WikiPage.ts";
 
-export { GitHubCredentials } from "./Credentials.ts";
+export { Credentials } from "./Credentials.ts";
 
 export class Providers extends Provider.ProviderCollection<Providers>()("GitHub") {}
 
@@ -132,6 +133,7 @@ export const providers = (options?: ProvidersOptions) =>
         WikiPageProvider(),
       ),
     ),
+    Layer.provideMerge(GraphQLLive),
     Layer.provideMerge(Credentials.fromAuthProvider(options)),
     Layer.provideMerge(browserSession(options?.browser)),
     Layer.provideMerge(makeGitHubAuth(options)),

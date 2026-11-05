@@ -191,7 +191,7 @@ export const DevicePostureRuleProvider = () =>
       return undefined;
     }),
 
-    read: Effect.fn(function* ({ id, output, olds }) {
+    read: Effect.fn(function* ({ id, output, olds, previous }) {
       const { accountId } = yield* yield* CloudflareEnvironment;
       const acct = output?.accountId ?? accountId;
 
@@ -205,6 +205,9 @@ export const DevicePostureRuleProvider = () =>
       // carry no ownership markers, so brand the match `Unowned`.
       const name = yield* createRuleName(id, olds?.name);
       const match = yield* findByName(acct, name);
+      // A create-first replacement reuses the name: the generation it is
+      // replacing is not the replacement, so report nothing there yet.
+      if (match && match.id === previous?.postureRuleId) return undefined;
       if (match) return Unowned(toAttributes(match, acct));
       return undefined;
     }),
@@ -287,7 +290,7 @@ type ObservedRule =
 const observeRule = (accountId: string, ruleId: string) =>
   zeroTrust
     .getDevicePosture({ accountId, ruleId })
-    .pipe(Effect.catchTag("PostureRuleNotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("PostureRuleNotFound", () => Effect.undefined));
 
 /**
  * Find a posture rule by exact name (oldest-id-first for determinism when
