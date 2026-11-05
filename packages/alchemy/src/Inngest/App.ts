@@ -201,7 +201,7 @@ export const AppProvider = () =>
       const observe = (appId: string, environment: string | undefined) =>
         getApp({ appId, xInngestEnv: environment }).pipe(
           Effect.map((res) => res.data),
-          Effect.catchTag("AppNotFound", () => Effect.succeed(undefined)),
+          Effect.catchTag("AppNotFound", () => Effect.undefined),
         );
 
       const observeFunctions = (appId: string, environment: string | undefined) =>

@@ -296,7 +296,7 @@ const toAttributes = (devbox: DevBox, instanceId: string | undefined): DevboxAtt
   instanceId,
 });
 
-const notFound = () => Effect.succeed(undefined);
+const notFound = () => Effect.undefined;
 
 const byId = (id: string) =>
   fetch({ id }).pipe(

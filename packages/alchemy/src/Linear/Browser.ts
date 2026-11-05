@@ -141,8 +141,8 @@ export const layer = (
 const storageStateFromEnv = Effect.suspend(() => {
   const json = process.env.LINEAR_BROWSER_STORAGE_STATE;
   return json === undefined
-    ? Effect.succeed(undefined)
-    : Schema.decodeUnknownEffect(Schema.fromJsonString(Browser.StorageState))(json).pipe(
+    ? Effect.undefined
+    : Schema.decodeEffect(Schema.fromJsonString(Browser.StorageState))(json).pipe(
         Effect.catch(() =>
           Effect.die(new Error("LINEAR_BROWSER_STORAGE_STATE is not a Playwright storage state")),
         ),

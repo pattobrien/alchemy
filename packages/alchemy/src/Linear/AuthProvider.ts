@@ -27,7 +27,7 @@ export interface LinearResolvedCredentials {
 const readEnvironment = Effect.gen(function* () {
   const apiKey = yield* getEnvRedacted("LINEAR_API_KEY");
   if (!apiKey) {
-    return yield* new AuthError({
+    return yield* AuthError.make({
       message: "Linear CI credentials not found. Set LINEAR_API_KEY.",
     });
   }

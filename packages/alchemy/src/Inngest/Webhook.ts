@@ -68,10 +68,10 @@ export class WebhookReplacementRequired extends Data.TaggedError(
   "Inngest.WebhookReplacementRequired",
 )<{
   id: string;
-  name: string;
+  webhookName: string;
 }> {
   override get message() {
-    return `Inngest webhook '${this.name}' (${this.id}) cannot be updated in place: the update API only accepts name and transform and clears response and eventFilter. Replace it, or drop response and eventFilter.`;
+    return `Inngest webhook '${this.webhookName}' (${this.id}) cannot be updated in place: the update API only accepts name and transform and clears response and eventFilter. Replace it, or drop response and eventFilter.`;
   }
 }
 
@@ -187,7 +187,7 @@ export const WebhookProvider = () =>
             return toAttributes(observed);
           }
           if (setsExtras(news)) {
-            return yield* new WebhookReplacementRequired({ id: observed.id!, name });
+            return yield* new WebhookReplacementRequired({ id: observed.id!, webhookName: name });
           }
           const updated = yield* updateWebhook({
             id: observed.id!,

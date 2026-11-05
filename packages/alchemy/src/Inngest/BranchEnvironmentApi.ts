@@ -25,7 +25,7 @@ export const makeBranchEnvironmentApi = Effect.gen(function* () {
     }
     return yield* patchEnv({ id: observed.id, xInngestEnv: name, isArchived }).pipe(
       Effect.map((patched) => patched.data),
-      Effect.catchTag("EnvironmentNotFound", () => Effect.succeed(undefined)),
+      Effect.catchTag("EnvironmentNotFound", () => Effect.undefined),
     );
   });
 

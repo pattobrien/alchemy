@@ -28,7 +28,7 @@ export class AppRemoveFailed extends Data.TaggedError("Inngest.AppRemoveFailed")
 const DEFAULT_DEV_SERVER = `http://localhost:${DEFAULT_DEV_SERVER_PORT}`;
 
 const transportErrorAsMissing = (error: HttpClientError) =>
-  error.reason._tag === "TransportError" ? Effect.succeed(undefined) : Effect.fail(error);
+  error.reason._tag === "TransportError" ? Effect.undefined : Effect.fail(error);
 
 const devServerCredentials = (devServer: string) =>
   Effect.provideService(
@@ -56,8 +56,11 @@ export const LocalAppProvider = () =>
             );
           const body = yield* res.json.pipe(Effect.orElseSucceed(() => undefined));
           const message =
-            typeof body === "object" && body !== null && "message" in body
-              ? String(body.message)
+            typeof body === "object" &&
+            body !== null &&
+            "message" in body &&
+            typeof body.message === "string"
+              ? body.message
               : `HTTP ${res.status}`;
           if (res.status === 502 || res.status === 503 || res.status === 504) {
             return yield* new AppHostUnreachable({ appId, url, message });
@@ -148,8 +151,10 @@ export const LocalAppProvider = () =>
           const observed = yield* Inngest.getV2App({ appId }).pipe(
             devServerCredentials(devServer),
             Effect.map((res) => res.data),
-            Effect.catchTag("AppNotFound", () => Effect.succeed(undefined)),
-            Effect.catchTag("HttpClientError", transportErrorAsMissing),
+            Effect.catchTags({
+              AppNotFound: () => Effect.undefined,
+              HttpClientError: transportErrorAsMissing,
+            }),
           );
           if (observed === undefined) return undefined;
           const functions = yield* observeFunctions(devServer, appId).pipe(

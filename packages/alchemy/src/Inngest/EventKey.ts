@@ -42,11 +42,11 @@ export type EventKey = Resource<
 >;
 
 export class EventKeyNotFound extends Data.TaggedError("Inngest.EventKeyNotFound")<{
-  name: string | undefined;
+  keyName: string | undefined;
   environment: string | undefined;
 }> {
   override get message() {
-    return `Inngest has no event key${this.name === undefined ? "" : ` named '${this.name}'`} in ${this.environment === undefined ? "the configured key's environment" : `environment '${this.environment}'`}`;
+    return `Inngest has no event key${this.keyName === undefined ? "" : ` named '${this.keyName}'`} in ${this.environment === undefined ? "the configured key's environment" : `environment '${this.environment}'`}`;
   }
 }
 
@@ -96,7 +96,7 @@ export const EventKeyProvider = () =>
           Effect.map(Option.getOrUndefined),
         );
         if (found?.key === undefined) {
-          return yield* new EventKeyNotFound({ name, environment });
+          return yield* new EventKeyNotFound({ keyName: name, environment });
         }
         return {
           id: found.id!,
@@ -115,7 +115,7 @@ export const EventKeyProvider = () =>
           return yield* observe(
             output?.name ?? olds.name,
             output?.environment ?? olds.environment,
-          ).pipe(Effect.catchTag("Inngest.EventKeyNotFound", () => Effect.succeed(undefined)));
+          ).pipe(Effect.catchTag("Inngest.EventKeyNotFound", () => Effect.undefined));
         }),
         delete: () => Effect.void,
       };

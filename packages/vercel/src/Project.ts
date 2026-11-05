@@ -178,7 +178,7 @@ const getProject = Effect.fn(function* (idOrName: string, teamId: string | undef
 });
 
 const observeProject = (idOrName: string, teamId: string | undefined) =>
-  getProject(idOrName, teamId).pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+  getProject(idOrName, teamId).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const projectName = (id: string, name: string | undefined) =>
   name ? Effect.succeed(name) : createPhysicalName({ id, lowercase: true, maxLength: 100 });

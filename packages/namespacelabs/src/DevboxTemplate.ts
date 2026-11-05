@@ -280,7 +280,7 @@ const toAttributes = (template: DevboxTemplateRecord): DevboxTemplateAttributes 
 const byName = (name: string) =>
   fetchTemplate({ name }).pipe(
     Effect.map((response) => response.template),
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
+    Effect.catchTag("NotFound", () => Effect.undefined),
   );
 
 export const DevboxTemplateProvider = () =>

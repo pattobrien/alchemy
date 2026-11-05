@@ -47,7 +47,7 @@ export const totp = (
   Effect.sync(() => {
     const digits = options?.digits ?? 6;
     const period = options?.period ?? 30;
-    const key = decodeBase32(Redacted.value(secret));
+    const key = secret.pipe(Redacted.value, decodeBase32);
     const counter = Buffer.alloc(8);
     counter.writeBigUInt64BE(BigInt(Math.floor(now / 1000 / period)));
     const digest = crypto.createHmac("sha1", key).update(counter).digest();

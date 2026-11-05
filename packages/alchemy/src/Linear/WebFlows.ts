@@ -88,12 +88,12 @@ const Manifest = Schema.Struct({
   ),
 });
 
-const decodeManifest = Schema.decodeUnknownSync(Schema.fromJsonString(Manifest));
+const decodeManifest = Schema.decodePromise(Schema.fromJsonString(Manifest));
 
-const decodeMutationResult = Schema.decodeUnknownSync(
+const decodeMutationResult = Schema.decodePromise(
   Schema.fromJsonString(
     Schema.Struct({
-      errors: Schema.optional(Schema.Array(Schema.Struct({ message: Schema.String }))),
+      errors: Schema.Struct({ message: Schema.String }).pipe(Schema.Array, Schema.optional),
     }),
   ),
 );
@@ -105,7 +105,7 @@ const committed = async (page: Page, operation: string, submit: () => Promise<vo
       (r.request().postData() ?? "").includes(`"operationName":"${operation}"`),
   );
   await submit();
-  const { errors } = decodeMutationResult(await (await response).text());
+  const { errors } = await decodeMutationResult(await (await response).text());
   if (errors !== undefined && errors.length > 0) {
     throw new Error(`Linear rejected ${operation}: ${errors.map((e) => e.message).join("; ")}`);
   }
@@ -190,11 +190,11 @@ const copied = async (page: Page, label: string) => {
 const downloadManifest = async (page: Page) => {
   const captured = await page.evaluateHandle(() => {
     const box: { blob?: Blob } = {};
-    const create = URL.createObjectURL;
+    const create = URL.createObjectURL.bind(URL);
     URL.createObjectURL = (object) => {
       URL.createObjectURL = create;
       if (object instanceof Blob) box.blob = object;
-      return create.call(URL, object);
+      return create(object);
     };
     return box;
   });
@@ -205,7 +205,7 @@ const downloadManifest = async (page: Page) => {
   ]);
   const text = await captured.evaluate((box) => box.blob?.text());
   if (text === undefined) throw new Error(`The manifest download on ${page.url()} was not a Blob`);
-  return decodeManifest(text);
+  return await decodeManifest(text);
 };
 
 const readAppPage = async (page: Page, id: string): Promise<LiveOAuthApp | undefined> => {

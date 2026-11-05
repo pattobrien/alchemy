@@ -250,6 +250,14 @@ export const installationSuspensionAction = (options: {
 };
 
 // A deleted app answers its own JWT with 404, which means no installation.
+export class GitHubAppUnreadable extends Data.TaggedError("GitHub.AppUnreadable")<{
+  readonly appId: number;
+}> {
+  override get message(): string {
+    return `GitHub App ${this.appId} could not be read`;
+  }
+}
+
 const findInstallation = (app: () => RestOctokit, account: string) =>
   unlessStatus([404], () => {
     const octokit = app();
@@ -435,7 +443,7 @@ export const AppInstallationProvider = () =>
         app().rest.apps.getAuthenticated(),
       );
       if (registration === null) {
-        return yield* Effect.fail(new Error(`GitHub App ${news.appId} could not be read`));
+        return yield* new GitHubAppUnreadable({ appId: news.appId });
       }
 
       // Observe by id, then by account (a reinstall has a new id), then

@@ -94,10 +94,10 @@ const toAttrs = (domain: directory.Domains, customer: string) => ({
 
 const getDomain = (customer: string, domainName: string | undefined) =>
   domainName === undefined || domainName.length === 0
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : directory
         .getDomains({ customer, domainName })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+        .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const DomainProvider = () =>
   Provider.succeed(Domain, {
@@ -129,11 +129,7 @@ export const DomainProvider = () =>
       if (current === undefined) {
         current = yield* directory
           .insertDomains({ customer, body: { domainName: news.domainName } })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              Effect.succeed<directory.Domains | undefined>(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (current === undefined) {
           current = yield* getDomain(customer, news.domainName);
         }

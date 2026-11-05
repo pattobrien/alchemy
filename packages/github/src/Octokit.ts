@@ -3,6 +3,7 @@ import { Credentials } from "@distilled.cloud/github/Credentials";
 import type { ConfigError } from "@distilled.cloud/github/Errors";
 import { Octokit as _Octokit } from "@octokit/rest";
 import type { AuthError } from "alchemy/Auth/AuthProvider";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Predicate from "effect/Predicate";
 import * as Redacted from "effect/Redacted";
@@ -52,11 +53,21 @@ export const appOctokit = (
   });
 };
 
+export class GitHubRequestFailed extends Data.TaggedError("GitHub.RequestFailed")<{
+  readonly cause: unknown;
+}> {
+  override get message(): string {
+    return Predicate.hasProperty(this.cause, "message") && typeof this.cause.message === "string"
+      ? this.cause.message
+      : "GitHub request failed";
+  }
+}
+
 /** Run an Octokit call, resolving to `undefined` on the given HTTP statuses. */
 export const unlessStatus = <A>(
   statuses: ReadonlyArray<number>,
   call: () => Promise<A>,
-): Effect.Effect<A | undefined, Error> =>
+): Effect.Effect<A | undefined, GitHubRequestFailed> =>
   Effect.tryPromise({
     try: () =>
       call().catch((error: unknown) => {
@@ -68,7 +79,7 @@ export const unlessStatus = <A>(
         }
         throw error;
       }),
-    catch: (error) => (error instanceof Error ? error : new Error(String(error))),
+    catch: (cause) => new GitHubRequestFailed({ cause }),
   });
 
 const freshAppKeyMessage = "Integration must generate a public key";

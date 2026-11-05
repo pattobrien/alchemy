@@ -281,10 +281,11 @@ const make = (resolved: ResolvedOptions) =>
   Effect.gen(function* () {
     const browser = yield* Browser.Browser;
     const totpSecret = resolved.credentials?.totpSecret;
+    const context = yield* Effect.context<never>();
     const totpCode = () =>
       totpSecret === undefined
         ? Promise.reject(new Error("No TOTP secret is configured"))
-        : Effect.runPromise(nextUnusedCode(totpSecret));
+        : nextUnusedCode(totpSecret).pipe(Effect.runPromiseWith(context));
     const page = <A>(url: string, f: (page: Page) => Promise<A>) =>
       browser
         .withPage(url, async (page) => {
