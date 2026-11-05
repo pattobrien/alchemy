@@ -1,8 +1,8 @@
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Effect from "effect/Effect";
 import { adopt, OwnedBySomeoneElse } from "@/AdoptPolicy";
 import * as Linear from "@/Linear";
-import * as Test from "@/Test/Alchemy";
 import { allNoop, guard, hasLinearCreds, scratchKey, scratchTeamId, team } from "./workspace.ts";
 
 const { test } = Test.make({ providers: Linear.providers() });

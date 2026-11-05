@@ -1,9 +1,9 @@
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as InngestApi from "@distilled.cloud/inngest";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Inngest from "alchemy/Inngest";
 import type * as Plan from "alchemy/Plan";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import * as Stream from "effect/Stream";

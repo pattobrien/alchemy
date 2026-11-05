@@ -1,4 +1,4 @@
-import type { Target } from "alchemy/Alchemist/Session";
+import type { Target } from "alchemy/Alchemist/Entrypoint";
 import { browserProfileDir } from "alchemy/Auth/Paths";
 import { resolveProfileName } from "alchemy/Auth/Resolve";
 import * as Effect from "effect/Effect";

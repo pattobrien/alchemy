@@ -4,7 +4,7 @@ import { materializeRuntimeBindings } from "@alchemy.run/cloudflare/Workers/Runt
 import * as Vite from "@alchemy.run/cloudflare/Workers/Sources/Vite";
 import type { ViteChildConfig } from "@alchemy.run/cloudflare/Workers/ViteChild.shared";
 import { expect } from "@alchemy.run/test";
-import * as Test from "alchemy/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";

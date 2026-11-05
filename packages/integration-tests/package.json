@@ -71,6 +71,7 @@
     "@neon/functions": "catalog:",
     "@octanejs/adapter-cloudflare": "catalog:",
     "@octanejs/vite-plugin": "catalog:",
+    "@octokit/rest": "catalog:",
     "@opennextjs/aws": "catalog:",
     "@opennextjs/cloudflare": "catalog:",
     "@prisma/adapter-d1": "catalog:",

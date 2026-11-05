@@ -542,7 +542,7 @@ export const GcpAuth = AuthProviderLayer<GcpAuthConfig, GcpResolvedCredentials>(
         Effect.flatMap((config) =>
           config.method === "gcloud"
             ? Effect.succeed<GcpAuthConfig>(config)
-            : promptRegion.pipe(Effect.map((region) => ({ ...config, region }))),
+            : promptRegion.pipe(Effect.map((region): GcpAuthConfig => ({ ...config, region }))),
         ),
         Effect.mapError((e) =>
           AuthError.make({

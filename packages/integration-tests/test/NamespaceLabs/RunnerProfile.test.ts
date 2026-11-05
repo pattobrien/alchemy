@@ -1,7 +1,7 @@
 import * as NamespaceLabs from "@alchemy.run/namespacelabs";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { listProfiles } from "@distilled.cloud/namespacelabs/github_profile";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: NamespaceLabs.providers() });

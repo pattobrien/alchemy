@@ -22,6 +22,9 @@ export const octokitFor = (
     return new _Octokit({ auth: Redacted.value(token), baseUrl: apiBaseUrl, userAgent });
   });
 
+export const Octokit: Effect.Effect<_Octokit, AuthError | ConfigError, Credentials> =
+  octokitFor(undefined);
+
 /**
  * An Octokit authenticated as a GitHub App: a short-lived RS256 JWT signed
  * with the app's private key (Octokit sends a three-part token as a Bearer
