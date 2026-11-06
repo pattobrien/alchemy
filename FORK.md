@@ -29,7 +29,8 @@ upstream has not merged yet.
   and `Builder` on the fork's `@distilled.cloud/namespacelabs` SDK, with its `NamespaceLabs` auth
   provider.
 - `submodules/distilled` points at [pattobrien/distilled](https://github.com/pattobrien/distilled).
-- The release workflow `.github/workflows/release-fork.yml` and `scripts/release/fork-publish.ts`.
+- The release workflow `.github/workflows/release-fork.yml` and its scripts `fork-publish.ts`,
+  `fork-next-version.ts` and `command.ts` in `scripts/release`.
 
 Remove an item once upstream merges its PR and a sync brings the change in.
 
@@ -49,15 +50,31 @@ fork release and never reuses a number that has a tag.
 
 ## Cutting a release
 
-1. If pattobrien/distilled has a new fork release, set `distilled` in `scripts/release/fork.json`
-   to its version and merge that change into `main`.
-2. Type-check `main` with `pnpm typecheck`.
-3. To preview the package map and its rewrites, run
-   `node scripts/release/fork-publish.ts --dry-run <upstream>-fork.N`.
-4. Run `git tag v<upstream>-fork.N <sha>`, then `git push origin v<upstream>-fork.N`.
+Every push to `main` runs `release-fork.yml`, so merging a PR cuts a release. The workflow computes
+the next version with `scripts/release/fork-next-version.ts`: the shared `version` plus `-fork.N`,
+where N is one more than the highest `v*-fork.*` tag on the remote. It runs `pnpm build:pkg`, tags
+the commit `v<version>`, then publishes each package. The publish script skips any package version
+that is already on the registry.
 
-The tag push starts `release-fork.yml`, which runs `pnpm build:pkg` and publishes each package. The
-script skips any package version that is already on the registry.
+Runs on `main` share one concurrency group, so they run one at a time and no two get the same N.
+Only one run waits at a time. A newer push replaces the waiting run, and its release carries both
+changes.
+
+If pattobrien/distilled has a new fork release, set `distilled` in `scripts/release/fork.json` to
+its version and merge that change into `main`.
+
+Pushing a `v<upstream>-fork.N` tag by hand publishes that exact version. To cut the next fork.N
+from `main` without a merge, run the workflow by hand:
+
+```sh
+gh workflow run release-fork.yml -R pattobrien/alchemy
+```
+
+A run on `main` that fails after it tags leaves that N with some packages missing. Run it again and
+it publishes the same commit as the next N.
+
+To preview the package map and its rewrites, run
+`node scripts/release/fork-publish.ts --dry-run <upstream>-fork.N`.
 
 ## Syncing from upstream
 
