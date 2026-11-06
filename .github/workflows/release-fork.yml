@@ -2,15 +2,18 @@ name: Release (fork)
 
 on:
   push:
+    branches:
+      - main
     tags:
       - "v*-fork.*"
+  workflow_dispatch:
 
 concurrency:
   group: release-fork-${{ github.ref }}
   cancel-in-progress: false
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 jobs:
@@ -31,6 +34,17 @@ jobs:
           install: true
           require-lockfile: true
 
+      - name: Resolve the fork version
+        id: version
+        run: |
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION="$(node scripts/release/fork-next-version.ts)"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Publishing $VERSION"
+
       - name: Build release packages
         env:
           GOMEMLIMIT: 6GiB
@@ -44,5 +58,15 @@ jobs:
           echo '@pattobrien:registry=https://npm.pkg.github.com' >> .npmrc
           pnpm config set //npm.pkg.github.com/:_authToken "$NODE_AUTH_TOKEN"
 
+      - name: Tag the release
+        if: github.ref_type == 'branch'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          git tag "v$VERSION" "$GITHUB_SHA"
+          git push origin "v$VERSION"
+
       - name: Publish to GitHub Packages
-        run: node scripts/release/fork-publish.ts "${GITHUB_REF_NAME#v}"
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: node scripts/release/fork-publish.ts "$VERSION"
