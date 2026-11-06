@@ -5,7 +5,7 @@ import type * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import type * as Path from "effect/Path";
 import * as Schema from "effect/Schema";
-import { errors, type Page } from "playwright-core";
+import type { Page } from "playwright-core";
 import { browserProfileDir } from "../Auth/Paths.ts";
 import { DEFAULT_PROFILE_NAME } from "../Auth/Profile.ts";
 import * as Browser from "../Browser.ts";
@@ -68,6 +68,7 @@ const inWorkspace = (url: URL) =>
   url.origin === LINEAR_ORIGIN && url.pathname !== "/" && !SIGNED_OUT.test(url.pathname);
 
 const settle = async (page: Page, timeout: number) => {
+  const { errors } = await import("playwright-core");
   await page.waitForURL(inWorkspace, { timeout }).catch((error: unknown) => {
     if (!(error instanceof errors.TimeoutError)) throw error;
   });
@@ -140,8 +141,8 @@ export const layer = (
 const storageStateFromEnv = Effect.suspend(() => {
   const json = process.env.LINEAR_BROWSER_STORAGE_STATE;
   return json === undefined
-    ? Effect.succeed(undefined)
-    : Schema.decodeUnknownEffect(Schema.fromJsonString(Browser.StorageState))(json).pipe(
+    ? Effect.undefined
+    : Schema.decodeEffect(Schema.fromJsonString(Browser.StorageState))(json).pipe(
         Effect.catch(() =>
           Effect.die(new Error("LINEAR_BROWSER_STORAGE_STATE is not a Playwright storage state")),
         ),

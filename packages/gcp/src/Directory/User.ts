@@ -187,10 +187,8 @@ const toAttrs = (user: directory.User, customer: string | undefined) => ({
 
 const getUser = (userKey: string | undefined) =>
   userKey === undefined || userKey.length === 0
-    ? Effect.succeed(undefined)
-    : directory
-        .getUsers({ userKey })
-        .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    ? Effect.undefined
+    : directory.getUsers({ userKey }).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const retryWhilePropagating = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
@@ -293,11 +291,7 @@ export const UserProvider = () =>
       if (current === undefined) {
         current = yield* directory
           .insertUsers({ body: createBody(news) })
-          .pipe(
-            Effect.catchTag("Conflict", () =>
-              Effect.succeed<directory.User | undefined>(undefined),
-            ),
-          );
+          .pipe(Effect.catchTag("Conflict", () => Effect.undefined));
         if (current === undefined) {
           current = yield* getUser(news.primaryEmail);
         }

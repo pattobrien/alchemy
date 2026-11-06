@@ -85,7 +85,7 @@ const byName = (name: string) =>
 
 const find = (name: string, slug: string | undefined) =>
   (slug === undefined
-    ? Effect.succeed(undefined)
+    ? Effect.undefined
     : orUndefined(serviceAccountsGet({ slug })).pipe(
         Effect.map((response) => response?.service_account),
       )

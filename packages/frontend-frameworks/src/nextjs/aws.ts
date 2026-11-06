@@ -10,6 +10,8 @@ import type { PlatformError } from "effect/PlatformError";
 import * as ChildProcess from "effect/process/ChildProcess";
 import type * as Scope from "effect/Scope";
 import * as Stream from "effect/Stream";
+import { makeChildOutput } from "../core/ChildOutput.ts";
+import { logChildOutput } from "../core/ChildOutput.ts";
 /**
  * `@alchemy.run/frontend-frameworks/nextjs/aws` — Next.js on AWS Lambda via
  * `@opennextjs/aws`.
@@ -177,8 +179,13 @@ const runOpenNextBuild = (options: {
       // mutates its own process.env (NEXT_PRIVATE_STANDALONE,
       // NEXT_PRIVATE_OUTPUT_TRACE_ROOT) before exec'ing `next build`, and
       // those mutations do not reliably reach execSync children under bun.
+      // `next build` must run as production, like `nextjs/node.ts` and
+      // `BuildChild`: an inherited NODE_ENV (left by an in-process dev server
+      // in the same long-lived process) breaks prerendering `/_global-error`
+      // ("Cannot read properties of null (reading 'useContext')").
       const env = yield* Effect.sync(() => ({
         ...process.env,
+        NODE_ENV: "production",
         ...options.env,
       }));
       const child = yield* ChildProcess.make(
@@ -194,15 +201,22 @@ const runOpenNextBuild = (options: {
       ).pipe(
         Effect.mapError(fail("Failed to spawn the @opennextjs/aws build CLI (is `node` on PATH?)")),
       );
+      // Build output becomes log records, so the process that renders logs
+      // shows it and in-process capture (a test runner's log file) sees it.
       const forward = (
         stream: Stream.Stream<Uint8Array, PlatformError>,
-        dest: NodeJS.WriteStream,
-      ) => Stream.runForEach(stream, (chunk) => Effect.sync(() => dest.write(chunk)));
+        name: "stdout" | "stderr",
+      ) =>
+        stream.pipe(
+          Stream.decodeText,
+          Stream.splitLines,
+          Stream.runForEach((line) => logChildOutput(line, name)),
+        );
       const { exitCode } = yield* Effect.all(
         {
           exitCode: child.exitCode,
-          stdout: forward(child.stdout, process.stdout),
-          stderr: forward(child.stderr, process.stderr),
+          stdout: forward(child.stdout, "stdout"),
+          stderr: forward(child.stderr, "stderr"),
         },
         { concurrency: "unbounded" },
       ).pipe(Effect.mapError(fail("Failed reading the OpenNext build's output")));
@@ -269,46 +283,61 @@ const spawnNextDev = (options: {
   readonly host?: string | undefined;
 }): Effect.Effect<NextDevChild, FrameworkCore.FrameworkError, Scope.Scope> =>
   Effect.acquireRelease(
-    Effect.try({
-      try: () => {
-        const cp = createRequire(import.meta.url)("child_process") as typeof NodeChildProcessModule;
-        const child = cp.spawn(
-          "node",
-          [
-            options.cli,
-            "dev",
-            "-p",
-            String(options.port),
-            ...(options.host !== undefined ? ["-H", options.host] : []),
-          ],
-          {
-            cwd: options.root,
-            stdio: ["ignore", "pipe", "pipe"],
-            detached: false,
-          },
-        );
-        let exited = false;
-        let output = "";
-        const capture = (chunk: unknown) => {
-          output += String(chunk);
-          if (output.length > 65536) output = output.slice(-32768);
-          process.stderr.write(String(chunk));
-        };
-        child.stdout?.on("data", capture);
-        child.stderr?.on("data", capture);
-        child.once("exit", () => {
-          exited = true;
-        });
-        return {
-          child,
-          handle: {
-            exited: () => exited,
-            output: () => output,
-          } satisfies NextDevChild,
-        };
-      },
-      catch: fail("Failed to spawn the next dev CLI (is `node` on PATH?)"),
-    }),
+    Effect.flatMap(makeChildOutput, (childOutput) =>
+      Effect.try({
+        try: () => {
+          const cp = createRequire(import.meta.url)(
+            "child_process",
+          ) as typeof NodeChildProcessModule;
+          const child = cp.spawn(
+            "node",
+            [
+              options.cli,
+              "dev",
+              "-p",
+              String(options.port),
+              ...(options.host !== undefined ? ["-H", options.host] : []),
+            ],
+            {
+              cwd: options.root,
+              stdio: ["ignore", "pipe", "pipe"],
+              detached: false,
+            },
+          );
+          let exited = false;
+          let output = "";
+          const capture = (chunk: unknown) => {
+            output += String(chunk);
+            if (output.length > 65536) output = output.slice(-32768);
+          };
+          child.stdout?.on("data", (chunk: unknown) => {
+            capture(chunk);
+            childOutput.stdout.push(String(chunk));
+          });
+          child.stderr?.on("data", (chunk: unknown) => {
+            capture(chunk);
+            childOutput.stderr.push(String(chunk));
+          });
+          // Output without a trailing newline is still a line once the
+          // streams close.
+          child.once("close", () => {
+            childOutput.stdout.flush();
+            childOutput.stderr.flush();
+          });
+          child.once("exit", () => {
+            exited = true;
+          });
+          return {
+            child,
+            handle: {
+              exited: () => exited,
+              output: () => output,
+            } satisfies NextDevChild,
+          };
+        },
+        catch: fail("Failed to spawn the next dev CLI (is `node` on PATH?)"),
+      }),
+    ),
     ({ child }) =>
       Effect.callback<void>((resume) => {
         if (child.exitCode !== null) {

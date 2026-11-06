@@ -29,7 +29,7 @@ export interface InngestResolvedCredentials {
 const readEnvironment = Effect.gen(function* () {
   const apiKey = yield* getEnvRedacted("INNGEST_API_KEY");
   if (!apiKey) {
-    return yield* new AuthError({
+    return yield* AuthError.make({
       message: "Inngest CI credentials not found. Set INNGEST_API_KEY.",
     });
   }

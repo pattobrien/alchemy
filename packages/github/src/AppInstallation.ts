@@ -8,16 +8,10 @@ import * as Effect from "effect/Effect";
 import * as Option from "effect/Option";
 import type * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
-import { githubWebOrigin } from "./BaseUrl.ts";
+import { effectiveGitHubBaseUrl, githubWebOrigin } from "./BaseUrl.ts";
 import type { GitHubBrowser, GitHubBrowserError } from "./Browser.ts";
 import { manualStep, pollUntilDefined, withBrowser } from "./ManualStep.ts";
-import {
-  appOctokit,
-  effectiveGitHubBaseUrl,
-  octokitFor,
-  retryFreshAppKey,
-  unlessStatus,
-} from "./Octokit.ts";
+import { appOctokit, octokitFor, retryFreshAppKey, unlessStatus } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 import {
   acceptInstallationPermissions,
@@ -256,6 +250,14 @@ export const installationSuspensionAction = (options: {
 };
 
 // A deleted app answers its own JWT with 404, which means no installation.
+export class GitHubAppUnreadable extends Data.TaggedError("GitHub.AppUnreadable")<{
+  readonly appId: number;
+}> {
+  override get message(): string {
+    return `GitHub App ${this.appId} could not be read`;
+  }
+}
+
 const findInstallation = (app: () => RestOctokit, account: string) =>
   unlessStatus([404], () => {
     const octokit = app();
@@ -441,7 +443,7 @@ export const AppInstallationProvider = () =>
         app().rest.apps.getAuthenticated(),
       );
       if (registration === null) {
-        return yield* Effect.fail(new Error(`GitHub App ${news.appId} could not be read`));
+        return yield* new GitHubAppUnreadable({ appId: news.appId });
       }
 
       // Observe by id, then by account (a reinstall has a new id), then

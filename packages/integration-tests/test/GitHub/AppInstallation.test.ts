@@ -1,10 +1,10 @@
 import * as GitHub from "@alchemy.run/github";
 import { Octokit } from "@alchemy.run/github/Octokit";
 import { describe, expect, it } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { adopt } from "alchemy/AdoptPolicy";
 import * as Interaction from "alchemy/Interaction";
 import * as RemovalPolicy from "alchemy/RemovalPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import { isUserFacing } from "alchemy/UserFacingError";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";

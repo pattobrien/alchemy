@@ -1,4 +1,5 @@
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
+import type { DockerfileBuild, DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
 import type { ImageRegistry } from "@alchemy.run/docker/Registry";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import type * as Bundle from "alchemy/Bundle/Bundle";
@@ -172,7 +173,10 @@ export interface ContainerApplicationPropsBase extends PlatformProps {
    */
   labels?: ContainerApplication.Label[];
   /**
-   * Network configuration for the deployment.
+   * Network configuration for the deployment: IPv4/IPv6 address assignment
+   * (`"none"` or `"predefined"`) and `mode` (`"private"` or `"public"`).
+   * `assignIpv4: "predefined"` implies `mode: "public"`, so private-only
+   * accounts set both families to `"none"`.
    */
   network?: ContainerApplication.Network;
   /**
@@ -363,7 +367,8 @@ export interface EffectfulContainerProps extends ContainerApplicationPropsBase {
  * Build the container image from your own Dockerfile — no Effect program is
  * bundled. The image is shipped as-is.
  */
-export interface ExternalContainerProps extends ContainerApplicationPropsBase {
+export interface ExternalContainerProps
+  extends ContainerApplicationPropsBase, DockerfileBuildOptions {
   /**
    * The build context directory containing the Dockerfile and any files it
    * copies. Only valid with a `dockerfile` PATH (not inline content).
@@ -390,6 +395,12 @@ export interface RemoteContainerProps extends ContainerApplicationPropsBase {
    * The pre-built image to pull and re-push.
    *
    * E.g. `ghcr.io/alpine/alpine:latest`
+   *
+   * Alchemy pulls the image as `linux/amd64` on every deploy and every
+   * `alchemy dev` start, so a mutable tag picks up a newly pushed image.
+   * An image that exists only in the local Docker (built on this machine
+   * or `docker load`ed) is used as-is when the pull fails; build it with
+   * `--platform linux/amd64`, the platform Cloudflare runs.
    *
    * When the reference already points at the target registry (the
    * {@link ContainerApplicationPropsBase.registryId | registryId} host,
@@ -443,7 +454,7 @@ export interface DurableObjectApplicationSettings {
  * new application and Durable Object namespace.
  */
 export interface DurableObjectContainerProps
-  extends DurableObjectApplicationSettings, PlatformProps {
+  extends DurableObjectApplicationSettings, PlatformProps, DockerfileBuildOptions {
   /** Select images and instance sizes in `ctx.container.start()`. */
   schedulingPolicy: "durable_object";
   /**
@@ -451,6 +462,12 @@ export interface DurableObjectContainerProps
    * `"node:24-slim"`. Exclusive with {@link context} and {@link dockerfile}.
    * Omit every image source to contribute no image: `start()` then uses the
    * managed `cloudflare/debian-trixie` image unless given another.
+   *
+   * Alchemy pulls the image as `linux/amd64` on every deploy and every
+   * `alchemy dev` start, so a mutable tag picks up a newly pushed image.
+   * An image that exists only in the local Docker (built on this machine
+   * or `docker load`ed) is used as-is when the pull fails; build it with
+   * `--platform linux/amd64`, the platform Cloudflare runs.
    */
   image?: string;
   /**
@@ -507,7 +524,8 @@ export interface AnyContainerApplicationProps extends Omit<
   runtime?: "bun" | "node";
   external?: string[];
   autoInstallExternals?: boolean;
-  build?: Bundle.BundleConfig;
+  /** Bundler config for `main`; Docker build args and secrets for `context`. */
+  build?: Bundle.BundleConfig & DockerfileBuild;
 }
 
 export type ContainerServices = ContainerApplication | PlatformServices | ProcessServices;
@@ -746,7 +764,7 @@ export type ContainerShape = Main<ContainerServices>;
  * export class Web extends Cloudflare.Container<Web>()("Web", {
  *   main: import.meta.url,
  *   ports: [{ name: "http", port: 8080 }],
- *   network: { assignIpv4: "predefined", mode: "public" },
+ *   network: { assignIpv4: "none", assignIpv6: "none", mode: "private" },
  *   dns: { servers: ["1.1.1.1"], searches: ["internal"] },
  *   checks: [{ name: "ready", type: "http", port: "8080", tls: false }],
  * }) {}
@@ -756,6 +774,11 @@ export type ContainerShape = Main<ContainerServices>;
  * assignment and public/private reachability, `dns` overrides resolver settings,
  * and `checks` tells Cloudflare how to probe the container before routing
  * traffic to it.
+ *
+ * The example is the private shape, which every account accepts.
+ * `assignIpv4: "predefined"` requests public reachability: Cloudflare infers
+ * `mode: "public"` when `mode` is omitted, rejects it on accounts that only
+ * permit private networking, and refuses it alongside `mode: "private"`.
  *
  * ### Observability & Access
  * Turn on log shipping with `observability` and install `sshPublicKeyIds` for
@@ -957,6 +980,7 @@ export declare namespace DevContainerImage {
     readonly dockerfile: string;
     readonly context?: string;
     readonly buildArgs?: Record<string, string>;
+    readonly buildSecrets?: Record<string, string | Redacted.Redacted<string>>;
   }
   export interface Pull extends Base {
     readonly imageUri: string;

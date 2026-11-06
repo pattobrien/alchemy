@@ -35,6 +35,10 @@ export class BrowserAutomationFailed extends Data.TaggedError("BrowserAutomation
 
 export type BrowserError = BrowserUnavailable | BrowserAutomationFailed;
 
+class PageCallbackFailed extends Data.TaggedError("PageCallbackFailed")<{
+  readonly cause: unknown;
+}> {}
+
 export interface BrowserProxy {
   /** Proxy URL, e.g. `http://proxy.example.com:3128` or `socks5://host:1080`. */
   readonly server: string;
@@ -45,27 +49,19 @@ export interface BrowserProxy {
 const NameValue = Schema.Struct({ name: Schema.String, value: Schema.String });
 
 export const StorageState = Schema.Struct({
-  cookies: Schema.mutable(
-    Schema.Array(
-      Schema.Struct({
-        ...NameValue.fields,
-        domain: Schema.String,
-        path: Schema.String,
-        expires: Schema.Number,
-        httpOnly: Schema.Boolean,
-        secure: Schema.Boolean,
-        sameSite: Schema.Literals(["Strict", "Lax", "None"]),
-      }),
-    ),
-  ),
-  origins: Schema.mutable(
-    Schema.Array(
-      Schema.Struct({
-        origin: Schema.String,
-        localStorage: Schema.mutable(Schema.Array(NameValue)),
-      }),
-    ),
-  ),
+  cookies: Schema.Struct({
+    ...NameValue.fields,
+    domain: Schema.String,
+    path: Schema.String,
+    expires: Schema.Number,
+    httpOnly: Schema.Boolean,
+    secure: Schema.Boolean,
+    sameSite: Schema.Literals(["Strict", "Lax", "None"]),
+  }).pipe(Schema.Array, Schema.mutable),
+  origins: Schema.Struct({
+    origin: Schema.String,
+    localStorage: NameValue.pipe(Schema.Array, Schema.mutable),
+  }).pipe(Schema.Array, Schema.mutable),
 });
 
 export type StorageState = typeof StorageState.Type;
@@ -279,16 +275,14 @@ export const layer = (
               await page.waitForLoadState();
               return await f(page);
             },
-            catch: (cause) => cause,
+            catch: (cause) => (isBrowserError(cause) ? cause : new PageCallbackFailed({ cause })),
           }).pipe(
-            Effect.catch((cause) =>
-              isBrowserError(cause)
-                ? Effect.fail(cause)
-                : screenshotOf(page).pipe(
-                    Effect.flatMap((screenshot) =>
-                      Effect.fail(new BrowserAutomationFailed({ url, screenshot, cause })),
-                    ),
-                  ),
+            Effect.catchTag("PageCallbackFailed", ({ cause }) =>
+              screenshotOf(page).pipe(
+                Effect.flatMap((screenshot) =>
+                  Effect.fail(new BrowserAutomationFailed({ url, screenshot, cause })),
+                ),
+              ),
             ),
             Effect.ensuring(Effect.ignore(Effect.tryPromise(() => page.close()))),
           );

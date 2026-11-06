@@ -1,6 +1,6 @@
 import * as Cloudflare from "@alchemy.run/cloudflare";
 import { expect } from "@alchemy.run/test";
-import * as Test from "alchemy/Test/Alchemy";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClientRequest from "effect/http/HttpClientRequest";
@@ -94,5 +94,5 @@ test(
     expect(receipt.at).toBeLessThan(before + 15_000 + 30_000);
     expect(yield* cancel(base, `direct-${run}`)).toBe("Cancelled");
   }),
-  { timeout: 180_000 },
+  { timeout: 180_000, tags: ["provider:cloudflare", "provider:cloudflare:worker", "live"] },
 );

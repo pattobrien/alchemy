@@ -99,7 +99,7 @@ export const SigningKeyProvider = () =>
         }),
         read: Effect.fn(function* ({ olds, output }) {
           return yield* observe(output?.environment ?? olds.environment).pipe(
-            Effect.catchTag("Inngest.SigningKeyNotFound", () => Effect.succeed(undefined)),
+            Effect.catchTag("Inngest.SigningKeyNotFound", () => Effect.undefined),
           );
         }),
         delete: () => Effect.void,

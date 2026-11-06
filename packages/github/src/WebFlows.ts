@@ -1,3 +1,4 @@
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Schedule from "effect/Schedule";
 import * as Semaphore from "effect/Semaphore";
@@ -41,19 +42,22 @@ const openCollapsedGroups = (element: HTMLElement) => {
   }
 };
 
-class ChangeRejected extends Error {
-  constructor(
-    readonly url: string,
-    readonly flash: string,
-  ) {
-    super(`GitHub rejected the change on ${url}: ${flash}`);
+class ChangeRejected extends Data.TaggedError("GitHub.ChangeRejected")<{
+  readonly url: string;
+  readonly flash: string;
+}> {
+  override get message(): string {
+    return `GitHub rejected the change on ${this.url}: ${this.flash}`;
   }
 }
 
 const failIfRejected = async (page: Page) => {
   const error = page.locator(ERROR_FLASH).filter({ visible: true });
   if ((await error.count()) > 0) {
-    throw new ChangeRejected(page.url(), (await error.first().innerText()).trim());
+    throw new ChangeRejected({
+      url: page.url(),
+      flash: (await error.first().innerText()).trim(),
+    });
   }
 };
 

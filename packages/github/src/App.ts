@@ -13,8 +13,9 @@ import * as Option from "effect/Option";
 import * as Redacted from "effect/Redacted";
 import * as Schedule from "effect/Schedule";
 import { githubWebOrigin } from "./BaseUrl.ts";
+import { effectiveGitHubBaseUrl } from "./BaseUrl.ts";
 import { manualStep, pollUntilDefined, withBrowser } from "./ManualStep.ts";
-import { appOctokit, effectiveGitHubBaseUrl, octokitFor, unlessStatus } from "./Octokit.ts";
+import { appOctokit, octokitFor, unlessStatus } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 import {
   appGeneralSettingsFormDrift,
@@ -342,7 +343,7 @@ export const appPrivateKeyPkcs8 = (slug: string, privateKey: Redacted.Redacted<s
   Effect.try({
     try: () =>
       Redacted.make(
-        createPrivateKey(Redacted.value(privateKey)).export({
+        privateKey.pipe(Redacted.value, createPrivateKey).export({
           type: "pkcs8",
           format: "pem",
         }),
@@ -829,6 +830,16 @@ const withPkcs8 = (slug: string, secrets: AppSecrets) =>
     Effect.map((privateKeyPkcs8) => ({ secrets, privateKeyPkcs8 })),
   );
 
+export class ManifestServerFailed extends Data.TaggedError("GitHub.ManifestServerFailed")<{
+  readonly cause: unknown;
+}> {
+  override get message(): string {
+    return this.cause instanceof Error
+      ? `The GitHub App manifest server failed: ${this.cause.message}`
+      : "The GitHub App manifest server has no port";
+  }
+}
+
 const escapeHtml = (value: string) =>
   value.replace(/[&<>"']/g, (char) => `&#${char.charCodeAt(0)};`);
 
@@ -841,6 +852,7 @@ const manifestServer = (props: AppProps, registrationUrl: string, state: string)
       GitHubAppManifestStateMismatch | GitHubAppManifestCodeMissing
     >();
     let origin = "";
+    const context = yield* Effect.context<never>();
     const server = http.createServer((req, res) => {
       const url = new URL(req.url ?? "/", origin);
       if (url.pathname === "/") {
@@ -861,7 +873,10 @@ const manifestServer = (props: AppProps, registrationUrl: string, state: string)
         res.writeHead(404).end();
         return;
       }
-      const result = Effect.runSync(Effect.result(parseManifestCallback(url.href, state)));
+      const result = parseManifestCallback(url.href, state).pipe(
+        Effect.result,
+        Effect.runSyncWith(context),
+      );
       res.writeHead(result._tag === "Success" ? 200 : 400, {
         "Content-Type": "text/plain; charset=utf-8",
       });
@@ -876,14 +891,14 @@ const manifestServer = (props: AppProps, registrationUrl: string, state: string)
       );
     });
     const port = yield* Effect.acquireRelease(
-      Effect.callback<number, Error>((resume) => {
-        server.once("error", (error) => resume(Effect.fail(error)));
+      Effect.callback<number, ManifestServerFailed>((resume) => {
+        server.once("error", (cause) => resume(Effect.fail(new ManifestServerFailed({ cause }))));
         server.listen(0, "127.0.0.1", () => {
           const address = server.address();
           resume(
             typeof address === "object" && address !== null
               ? Effect.succeed(address.port)
-              : Effect.fail(new Error("Manifest server has no port")),
+              : Effect.fail(new ManifestServerFailed({ cause: undefined })),
           );
         });
       }),

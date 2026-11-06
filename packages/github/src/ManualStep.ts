@@ -80,7 +80,7 @@ export const withBrowser = <A, E, R>(
       Option.match({
         onNone: () => Effect.succeed(Option.none<A>()),
         onSome: (browser) =>
-          Effect.provideService(automate, GitHubBrowser, browser).pipe(Effect.map(Option.some)),
+          Effect.provideService(automate, GitHubBrowser, browser).pipe(Effect.asSome),
       }),
     ),
   );

@@ -3,10 +3,10 @@ import { CloudflareEnvironment } from "@alchemy.run/cloudflare";
 import { findZoneByName } from "@alchemy.run/cloudflare/Zone";
 import * as Neon from "@alchemy.run/neon";
 import { assert, expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as hyperdrive from "@distilled.cloud/cloudflare/hyperdrive";
 import * as zeroTrust from "@distilled.cloud/cloudflare/zero-trust";
 import * as Provider from "alchemy/Provider";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as HttpClient from "effect/http/HttpClient";
@@ -15,6 +15,7 @@ import * as Redacted from "effect/Redacted";
 import { MinimumLogLevel } from "effect/References";
 import * as Schedule from "effect/Schedule";
 import * as pathe from "pathe";
+import { testName } from "../../names.ts";
 import { waitForWorkerToBeDeleted } from "../Utils/Worker.ts";
 import HyperdriveAccessEffectWorker from "./fixtures/access-effect-worker.ts";
 import {
@@ -462,7 +463,7 @@ test.provider(
 
 const cloudflaredBin = Bun.which("cloudflared");
 const dockerBin = Bun.which("docker");
-const ACCESS_ORIGIN_CONTAINER = "alchemy-test-hyperdrive-access-origin";
+const ACCESS_ORIGIN_CONTAINER = testName("alchemy-test-hyperdrive-access-origin");
 
 const run = (cmd: string[]) =>
   Effect.sync(() => Bun.spawnSync(cmd, { stdout: "pipe", stderr: "pipe" }));
@@ -654,7 +655,7 @@ test.provider.skipIf(!cloudflaredBin || !dockerBin)(
 // inside an AWS VPC with `cloudflared` running in the VPC. Both binding
 // flavors must query through it.
 
-const VPC_ORIGIN_CONTAINER = "alchemy-test-hyperdrive-vpc-origin";
+const VPC_ORIGIN_CONTAINER = testName("alchemy-test-hyperdrive-vpc-origin");
 
 test.provider.skipIf(!cloudflaredBin || !dockerBin)(
   "deploys and queries a private origin through a Workers VPC Service",

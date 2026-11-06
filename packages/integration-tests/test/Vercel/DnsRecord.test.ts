@@ -1,9 +1,9 @@
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { DnsRecord } from "@alchemy.run/vercel/DnsRecord";
 import { providers } from "@alchemy.run/vercel/Providers";
 import * as dns from "@distilled.cloud/vercel/dns";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";

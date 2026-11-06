@@ -1,196 +1,175 @@
-import * as NodeCrypto from "node:crypto";
 import {
   GCP_AUTH_PROVIDER_NAME,
   GcpAuth,
-  GcpAuthConfigSchema,
-  parseScopes,
-  serviceAccountKeyFromEnv,
+  parseGcloudLoginOutput,
   type GcpAuthConfig,
   type GcpResolvedCredentials,
 } from "@alchemy.run/gcp/AuthProvider";
-import {
-  CLOUD_PLATFORM_SCOPE,
-  signServiceAccountJwt,
-  type ServiceAccountKey,
-} from "@alchemy.run/gcp/Token";
 import { describe, expect, it } from "@alchemy.run/test";
 import * as NodeServices from "@effect/platform-node/NodeServices";
-import { AuthProviders, getAuthProvider } from "alchemy/Auth/AuthProvider";
+import { AuthProvidersLive, getAuthProvider, presentEnvironment } from "alchemy/Auth/AuthProvider";
 import { CredentialsStore } from "alchemy/Auth/Credentials";
-import { ProfileStore } from "alchemy/Auth/Profile";
 import * as Interaction from "alchemy/Interaction";
 import * as ConfigProvider from "effect/ConfigProvider";
 import * as Effect from "effect/Effect";
 import * as FileSystem from "effect/FileSystem";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import * as HttpClient from "effect/http/HttpClient";
+import * as HttpClientRequest from "effect/http/HttpClientRequest";
 import * as Layer from "effect/Layer";
 import * as Path from "effect/Path";
-import * as Schema from "effect/Schema";
-import { makeFakeCredentialsStore, makeFakeProfileStore } from "../Prisma/fakes.ts";
+import * as Redacted from "effect/Redacted";
 
-const DIRECTORY_SCOPES = [
-  "https://www.googleapis.com/auth/admin.directory.user",
-  "https://www.googleapis.com/auth/admin.directory.domain",
-];
-
-const keyPair = NodeCrypto.generateKeyPairSync("rsa", {
-  modulusLength: 2048,
-  privateKeyEncoding: { type: "pkcs8", format: "pem" },
-  publicKeyEncoding: { type: "spki", format: "pem" },
-});
-
-const serviceAccount: ServiceAccountKey = {
-  type: "service_account",
-  project_id: "alchemy-test",
-  client_email: "deployer@alchemy-test.iam.gserviceaccount.com",
-  private_key: keyPair.privateKey,
+const credentialsStore: CredentialsStore["Service"] = {
+  read: () => Effect.succeed(undefined),
+  write: () => Effect.void,
+  delete: () => Effect.void,
+  deleteProfile: () => Effect.void,
+  scoped: () => credentialsStore,
 };
 
-const ClaimsSchema = Schema.Struct({
-  iss: Schema.String,
-  sub: Schema.optionalKey(Schema.String),
-  scope: Schema.String,
-  aud: Schema.String,
-  iat: Schema.Number,
-  exp: Schema.Number,
-});
-
-const decodeClaims = (jwt: string) => {
-  const [header, payload, signature] = jwt.split(".");
-  const verifier = NodeCrypto.createVerify("RSA-SHA256");
-  verifier.update(`${header}.${payload}`);
-  expect(verifier.verify(keyPair.publicKey, signature ?? "", "base64url")).toBe(true);
-  return Schema.decodeUnknownSync(Schema.fromJsonString(ClaimsSchema))(
-    Buffer.from(payload ?? "", "base64url").toString("utf8"),
-  );
-};
-
-const envLayer = (env: Record<string, string>) =>
-  Layer.mergeAll(NodeServices.layer, ConfigProvider.layer(ConfigProvider.fromUnknown(env)));
-
-const authLayer = Layer.provideMerge(
-  GcpAuth,
-  Layer.mergeAll(
-    NodeServices.layer,
-    Layer.succeed(AuthProviders, {}),
-    Layer.succeed(ProfileStore, makeFakeProfileStore()),
-    Layer.succeed(CredentialsStore, makeFakeCredentialsStore()),
-    ConfigProvider.layer(ConfigProvider.fromUnknown({})),
-    Interaction.layerNonInteractive(),
-  ),
-);
-
-const gcpAuthProvider = getAuthProvider<GcpAuthConfig, GcpResolvedCredentials>(
-  GCP_AUTH_PROVIDER_NAME,
-);
-
-const writeKeyFile = Effect.gen(function* () {
-  const fs = yield* FileSystem.FileSystem;
-  const path = yield* Path.Path;
-  const dir = yield* fs.makeTempDirectoryScoped();
-  const file = path.join(dir, "key.json");
-  yield* fs.writeFileString(file, JSON.stringify(serviceAccount));
-  return file;
-});
-
-describe("GCP service-account auth", { tags: ["unit", "provider:gcp", "local"] }, () => {
-  it.effect("signs a cloud-platform JWT without a subject by default", () =>
-    Effect.sync(() => {
-      const claims = decodeClaims(signServiceAccountJwt(serviceAccount, 1_700_000_000_000));
-      expect(claims.iss).toBe(serviceAccount.client_email);
-      expect(claims.scope).toBe(CLOUD_PLATFORM_SCOPE);
-      expect("sub" in claims).toBe(false);
-      expect(claims.exp - claims.iat).toBe(3600);
-    }),
-  );
-
-  it.effect("joins scopes with spaces and sets sub to the delegation subject", () =>
-    Effect.sync(() => {
-      const claims = decodeClaims(
-        signServiceAccountJwt(serviceAccount, 1_700_000_000_000, {
-          scopes: DIRECTORY_SCOPES,
-          subject: "admin@example.com",
-        }),
-      );
-      expect(claims.scope).toBe(DIRECTORY_SCOPES.join(" "));
-      expect(claims.sub).toBe("admin@example.com");
-    }),
-  );
-
-  it.effect("parses scopes separated by whitespace or commas", () =>
-    Effect.sync(() => {
-      expect(parseScopes(` ${DIRECTORY_SCOPES[0]},${DIRECTORY_SCOPES[1]}\n`)).toEqual(
-        DIRECTORY_SCOPES,
-      );
-      expect(parseScopes(DIRECTORY_SCOPES.join(" "))).toEqual(DIRECTORY_SCOPES);
-      expect(parseScopes(" , ")).toBeUndefined();
-    }),
-  );
-
-  it.effect("reads GOOGLE_CREDENTIALS as key JSON when it starts with {", () =>
-    Effect.gen(function* () {
-      const key = yield* serviceAccountKeyFromEnv;
-      expect(key?.client_email).toBe(serviceAccount.client_email);
-    }).pipe(
-      Effect.provide(envLayer({ GOOGLE_CREDENTIALS: `  ${JSON.stringify(serviceAccount)}` })),
+const testLayer = (env: Record<string, string>) =>
+  GcpAuth.pipe(
+    Layer.provideMerge(
+      Layer.mergeAll(
+        NodeServices.layer,
+        AuthProvidersLive,
+        Layer.succeed(CredentialsStore, credentialsStore),
+        ConfigProvider.layer(ConfigProvider.fromEnv({ env })),
+        Interaction.layerNonInteractive(),
+      ),
     ),
   );
 
-  it.effect("reads GOOGLE_CREDENTIALS as a key file path otherwise", () =>
+const readGcloud = (config: Omit<Extract<GcpAuthConfig, { method: "gcloud" }>, "method">) =>
+  Effect.gen(function* () {
+    const auth = yield* getAuthProvider<GcpAuthConfig, GcpResolvedCredentials>(
+      GCP_AUTH_PROVIDER_NAME,
+    );
+    return yield* auth.read("default", Effect.succeed({ method: "gcloud" as const, ...config }));
+  });
+
+/**
+ * Runs `effect` with gcloud's config directory set to a fresh one holding
+ * the named `configurations` (gcloud's INI properties files).
+ */
+const withGcloudConfig = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
+  configurations: Record<string, string> = {},
+) =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const path = yield* Path.Path;
+    const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-gcloud-" });
+    yield* fs.makeDirectory(path.join(dir, "configurations"));
+    for (const [name, properties] of Object.entries(configurations)) {
+      yield* fs.writeFileString(path.join(dir, "configurations", `config_${name}`), properties);
+    }
+    return yield* effect.pipe(Effect.provide(testLayer({ CLOUDSDK_CONFIG: dir })));
+  }).pipe(Effect.scoped, Effect.provide(NodeServices.layer));
+
+describe("parseGcloudLoginOutput", { tags: ["unit", "provider:gcp", "local"] }, () => {
+  it("reads the authorization URL from gcloud's prompt", () => {
+    expect(
+      parseGcloudLoginOutput(`Your browser has been opened to visit:
+
+    https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=abc&redirect_uri=http%3A%2F%2Flocalhost%3A8085%2F
+
+`),
+    ).toBe(
+      "https://accounts.google.com/o/oauth2/auth?response_type=code&client_id=abc&redirect_uri=http%3A%2F%2Flocalhost%3A8085%2F",
+    );
+  });
+
+  it("waits until the URL has been printed", () => {
+    expect(parseGcloudLoginOutput("Your browser has been opened to visit:\n")).toBeUndefined();
+  });
+});
+
+/** The variables that would override the selected profile, given `env`. */
+const environmentOverride = (env: Record<string, string>) =>
+  Effect.gen(function* () {
+    const auth = yield* getAuthProvider<GcpAuthConfig, GcpResolvedCredentials>(
+      GCP_AUTH_PROVIDER_NAME,
+    );
+    return yield* presentEnvironment(auth.environment ?? []);
+  }).pipe(Effect.provide(testLayer(env)));
+
+describe("environment credentials", { tags: ["unit", "provider:gcp", "local"] }, () => {
+  it.effect("a project variable alone does not override the profile", () =>
     Effect.gen(function* () {
-      const file = yield* writeKeyFile;
-      const key = yield* serviceAccountKeyFromEnv.pipe(
-        Effect.provide(envLayer({ GOOGLE_CREDENTIALS: file })),
-      );
-      expect(key?.client_email).toBe(serviceAccount.client_email);
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
+      expect(yield* environmentOverride({ GOOGLE_CLOUD_PROJECT: "p" })).toBeUndefined();
+    }),
   );
 
-  it.effect("falls back to the GOOGLE_APPLICATION_CREDENTIALS path", () =>
+  it.effect("a token or key file overrides the profile", () =>
     Effect.gen(function* () {
-      const file = yield* writeKeyFile;
-      const key = yield* serviceAccountKeyFromEnv.pipe(
-        Effect.provide(envLayer({ GOOGLE_APPLICATION_CREDENTIALS: file })),
-      );
-      expect(key?.client_email).toBe(serviceAccount.client_email);
-      const none = yield* serviceAccountKeyFromEnv.pipe(Effect.provide(envLayer({})));
-      expect(none).toBeUndefined();
-    }).pipe(Effect.scoped, Effect.provide(NodeServices.layer)),
-  );
-
-  it.effect("rejects malformed GOOGLE_CREDENTIALS JSON without echoing it", () =>
-    Effect.gen(function* () {
-      const error = yield* Effect.flip(serviceAccountKeyFromEnv);
-      expect(error._tag).toBe("AuthError");
-      expect(error.message).toBe("GOOGLE_CREDENTIALS is not a valid service-account JSON key");
-    }).pipe(Effect.provide(envLayer({ GOOGLE_CREDENTIALS: '{"private_key": "secret-material' }))),
-  );
-
-  it.effect("stores scopes and subject from profile fields", () =>
-    Effect.gen(function* () {
-      const auth = yield* gcpAuthProvider;
-      if (auth.configureWith === undefined) {
-        return yield* Effect.die("GCP does not expose flag-driven configuration");
-      }
-      const config = yield* auth.configureWith("default", {
-        method: "serviceAccount",
-        values: {
-          scopes: DIRECTORY_SCOPES.join(","),
-          subject: " admin@example.com ",
-        },
-      });
-      expect(config).toEqual({
-        method: "serviceAccount",
-        scopes: DIRECTORY_SCOPES,
-        subject: "admin@example.com",
-      });
-      expect(Schema.decodeUnknownSync(GcpAuthConfigSchema)(config)).toEqual(config);
-      const fields = auth.configureMethods?.find(({ method }) => method === "serviceAccount");
-      expect(fields?.fields.map(({ name }) => name)).toEqual([
-        "credentialsFile",
-        "scopes",
-        "subject",
-        "region",
+      expect(
+        yield* environmentOverride({ GOOGLE_ACCESS_TOKEN: "t", GOOGLE_PROJECT_ID: "p" }),
+      ).toEqual(["GOOGLE_ACCESS_TOKEN", "GOOGLE_PROJECT_ID"]);
+      expect(yield* environmentOverride({ GOOGLE_APPLICATION_CREDENTIALS: "/key.json" })).toEqual([
+        "GOOGLE_APPLICATION_CREDENTIALS",
       ]);
-    }).pipe(Effect.provide(authLayer)),
+    }),
   );
 });
+
+describe("gcloud configuration", { tags: ["unit", "provider:gcp", "local"] }, () => {
+  it.effect("rejects a configuration that does not exist", () =>
+    Effect.gen(function* () {
+      const error = yield* withGcloudConfig(readGcloud({ configuration: "work" })).pipe(
+        Effect.flip,
+      );
+      expect(error._tag).toBe("AuthError");
+      expect(error.message).toContain("gcloud configuration 'work' does not exist");
+      expect(error.message).toContain("gcloud config configurations create work --no-activate");
+    }),
+  );
+});
+
+describe("gcloud configuration", { tags: ["provider:gcp", "live"] }, () => {
+  it.live("asks for a refresh when the configuration's account has no login", () =>
+    withGcloudConfig(readGcloud({ configuration: "work" }), {
+      work: "[core]\naccount = nobody@example.com\nproject = p\n",
+    }).pipe(
+      Effect.flip,
+      Effect.map((error) => {
+        expect(error._tag).toBe("NeedsReauth");
+        expect(error.message).toContain("gcloud configuration 'work' needs a login");
+        expect(error.message).toContain("alchemy profile refresh --profile default --provider GCP");
+      }),
+    ),
+  );
+});
+
+// Needs a named gcloud configuration with a login and a project on this
+// machine (`gcloud auth login --configuration=<name>`). Set
+// GCP_TEST_GCLOUD_CONFIGURATION to its name.
+const gcloudConfiguration = process.env.GCP_TEST_GCLOUD_CONFIGURATION;
+
+describe.skipIf(!gcloudConfiguration)(
+  "gcloud configuration with a real login",
+  { tags: ["provider:gcp", "live"] },
+  () => {
+    it.live("deploys as the configuration's account into its project", () =>
+      Effect.gen(function* () {
+        const credentials = yield* readGcloud({ configuration: gcloudConfiguration! }).pipe(
+          Effect.provide(testLayer({})),
+        );
+        expect(credentials.source.type).toBe("gcloud");
+        expect(credentials.source.details).toContain(`configuration ${gcloudConfiguration}`);
+        expect(credentials.expiresAt).toBeGreaterThan(Date.now());
+
+        const http = yield* HttpClient.HttpClient;
+        const response = yield* http.execute(
+          HttpClientRequest.get(
+            `https://cloudresourcemanager.googleapis.com/v3/projects/${credentials.project}`,
+          ).pipe(HttpClientRequest.bearerToken(Redacted.value(credentials.accessToken))),
+        );
+        expect(response.status).toBe(200);
+        const project = (yield* response.json) as { projectId: string };
+        expect(project.projectId).toBe(credentials.project);
+      }).pipe(Effect.provide(FetchHttpClient.layer)),
+    );
+  },
+);

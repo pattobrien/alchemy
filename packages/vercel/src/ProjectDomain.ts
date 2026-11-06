@@ -162,9 +162,7 @@ const getDomain = Effect.fn(function* (
 });
 
 const observeDomain = (project: string, domain: string, teamId: string | undefined) =>
-  getDomain(project, domain, teamId).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-  );
+  getDomain(project, domain, teamId).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 export const ProjectDomainProvider = () =>
   Provider.succeed(ProjectDomain, {

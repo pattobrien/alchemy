@@ -1,10 +1,10 @@
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { providers } from "@alchemy.run/vercel/Providers";
 import { Team } from "@alchemy.run/vercel/Team";
 import * as teams from "@distilled.cloud/vercel/teams";
 import * as user from "@distilled.cloud/vercel/user";
 import { adopt, OwnedBySomeoneElse } from "alchemy/AdoptPolicy";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 import { MinimumLogLevel } from "effect/References";
 import * as Result from "effect/Result";

@@ -1,7 +1,7 @@
 import * as Tailscale from "@alchemy.run/tailscale";
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import { getPolicyFile } from "@distilled.cloud/tailscale";
-import * as Test from "alchemy/Test/Alchemy";
 import * as Effect from "effect/Effect";
 
 const { test } = Test.make({ providers: Tailscale.providers() });

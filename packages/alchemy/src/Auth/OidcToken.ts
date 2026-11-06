@@ -86,7 +86,7 @@ const PLATFORMS: ReadonlyArray<{
         },
       });
       if (response.status !== 200) {
-        return yield* new AuthError({
+        return yield* AuthError.make({
           message: `GitHub Actions' OIDC token request answered ${response.status}`,
         });
       }
@@ -128,7 +128,7 @@ const PLATFORMS: ReadonlyArray<{
         return token ? Redacted.make(token) : undefined;
       },
       Effect.timeout(PROBE_TIMEOUT),
-      Effect.catch(() => Effect.succeed(undefined)),
+      Effect.orElseSucceed(() => undefined),
     ),
   },
 ];
@@ -156,9 +156,9 @@ export const detectOidcToken = Effect.fn("detectOidcToken")(function* (env: Oidc
     const token = yield* platform.probe(audience).pipe(
       Effect.timeout(PROBE_TIMEOUT),
       Effect.mapError((cause) =>
-        cause instanceof AuthError
+        Schema.is(AuthError)(cause)
           ? cause
-          : new AuthError({ message: `Requesting the ${platform.name} OIDC token failed`, cause }),
+          : AuthError.make({ message: `Requesting the ${platform.name} OIDC token failed`, cause }),
       ),
     );
     if (token !== undefined) {

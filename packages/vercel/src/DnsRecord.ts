@@ -159,14 +159,12 @@ const getRecord = Effect.fn(function* (
 });
 
 const observeRecord = (recordId: string, domain: string, teamId: string | undefined) =>
-  getRecord(recordId, domain, teamId).pipe(
-    Effect.catchTag("NotFound", () => Effect.succeed(undefined)),
-  );
+  getRecord(recordId, domain, teamId).pipe(Effect.catchTag("NotFound", () => Effect.undefined));
 
 const findRecord = Effect.fn(function* (props: DnsRecordProps) {
   const listed = yield* dns
     .getRecords({ domain: props.domain, teamId: props.teamId, limit: "100" })
-    .pipe(Effect.catchTag("NotFound", () => Effect.succeed(undefined)));
+    .pipe(Effect.catchTag("NotFound", () => Effect.undefined));
   if (listed === undefined || typeof listed === "string") return undefined;
   const match = listed.records.find(
     (record) =>

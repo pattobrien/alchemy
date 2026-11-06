@@ -1,10 +1,10 @@
 import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
 import * as Config from "effect/Config";
 import * as Effect from "effect/Effect";
 import * as Layer from "effect/Layer";
 import * as Redacted from "effect/Redacted";
 import * as Linear from "@/Linear";
-import * as Test from "@/Test/Alchemy";
 import { allNoop, guard, hasLinearCreds, hookUrl, oauthApp, oauthAppIds } from "./workspace.ts";
 
 const local = Test.make({ providers: Linear.providers({ browser: true }) });

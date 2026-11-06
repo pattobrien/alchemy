@@ -158,35 +158,47 @@ export const streamedByRef = Story.streamed(OrgFeed, Tour.ref("t-1"));
 const acme = OrgId.make("acme");
 const globex = OrgId.make("globex");
 
-describe("Domain keyed by a schema", () => {
+describe("Domain keyed by a schema", { tags: ["unit", "local"] }, () => {
   it.effect("folds every aggregate's events into the org they name", () =>
     story(
       Story.when(Tour.ref("t-1"), new BookTour({ orgId: acme, unit: "1A" })),
+      Story.then(Tour.ref("t-1"), new TourBooked({ orgId: acme, unit: "1A" })),
       Story.when(Tour.ref("t-2"), new BookTour({ orgId: acme, unit: "2B" })),
+      Story.then(Tour.ref("t-2"), new TourBooked({ orgId: acme, unit: "2B" })),
       Story.when(Tour.ref("t-3"), new BookTour({ orgId: globex, unit: "9Z" })),
+      Story.then(Tour.ref("t-3"), new TourBooked({ orgId: globex, unit: "9Z" })),
       Story.when(Tour.ref("t-1"), new CancelTour({ orgId: acme })),
+      Story.then(Tour.ref("t-1"), new TourCancelled({ orgId: acme })),
       Story.view(OrgSchedule, acme, { org: "acme", tours: { "t-2": "2B" } }),
       Story.view(OrgSchedule, globex, { org: "globex", tours: { "t-3": "9Z" } }),
       Story.view(OrgSchedule, OrgId.make("initech"), Story.none),
       Story.emitted(OrgSchedule, acme, [{ open: 1 }, { open: 2 }, { open: 1 }]),
+      Story.then(Board.ref("acme"), new Noted({ tour: "t-1" }), new Noted({ tour: "t-2" })),
+      Story.then(Board.ref("globex"), new Noted({ tour: "t-3" })),
     ),
   );
 
   it.effect("a view keyed by the same schema follows it without keyOf", () =>
     story(
       Story.when(Tour.ref("t-1"), new BookTour({ orgId: acme, unit: "1A" })),
+      Story.then(Tour.ref("t-1"), new TourBooked({ orgId: acme, unit: "1A" })),
       Story.view(OrgBusy, acme, { org: "acme", busy: false }),
       Story.when(Tour.ref("t-2"), new BookTour({ orgId: acme, unit: "2B" })),
+      Story.then(Tour.ref("t-2"), new TourBooked({ orgId: acme, unit: "2B" })),
       Story.view(OrgBusy, acme, { org: "acme", busy: true }),
       Story.view(OrgBusy, globex, Story.none),
+      Story.then(Board.ref("acme"), new Noted({ tour: "t-1" }), new Noted({ tour: "t-2" })),
     ),
   );
 
   it.effect("a projection keyed by the schema writes a stream keyed by it", () =>
     story(
       Story.when(Tour.ref("t-1"), new BookTour({ orgId: acme, unit: "1A" })),
+      Story.then(Tour.ref("t-1"), new TourBooked({ orgId: acme, unit: "1A" })),
       Story.when(Tour.ref("t-3"), new BookTour({ orgId: globex, unit: "9Z" })),
+      Story.then(Tour.ref("t-3"), new TourBooked({ orgId: globex, unit: "9Z" })),
       Story.when(Tour.ref("t-2"), new BookTour({ orgId: acme, unit: "2B" })),
+      Story.then(Tour.ref("t-2"), new TourBooked({ orgId: acme, unit: "2B" })),
       Story.streamed(
         OrgFeed,
         acme,
@@ -194,13 +206,17 @@ describe("Domain keyed by a schema", () => {
         new FeedItem({ tour: "t-2", unit: "acme:2B" }),
       ),
       Story.streamed(OrgFeed, globex, new FeedItem({ tour: "t-3", unit: "globex:9Z" })),
+      Story.then(Board.ref("acme"), new Noted({ tour: "t-1" }), new Noted({ tour: "t-2" })),
+      Story.then(Board.ref("globex"), new Noted({ tour: "t-3" })),
     ),
   );
 
   it.effect("a policy keyed by the schema gets the value as its key", () =>
     story(
       Story.when(Tour.ref("t-1"), new BookTour({ orgId: acme, unit: "1A" })),
+      Story.then(Tour.ref("t-1"), new TourBooked({ orgId: acme, unit: "1A" })),
       Story.when(Tour.ref("t-2"), new BookTour({ orgId: acme, unit: "2B" })),
+      Story.then(Tour.ref("t-2"), new TourBooked({ orgId: acme, unit: "2B" })),
       Story.then(Board.ref("acme"), new Noted({ tour: "t-1" }), new Noted({ tour: "t-2" })),
       Story.state(Board.ref("acme"), { notes: ["t-1", "t-2"] }),
     ),
@@ -234,7 +250,11 @@ describe("Domain keyed by a schema", () => {
 
   it.live("is served through an Api by its key", () =>
     Effect.gen(function* () {
-      class TourApi extends Domain.Api("TourApi", OrgSchedule, OrgFeed) {}
+      class TourApi extends Domain.Api("TourApi", {
+        model: Tours,
+        views: ["OrgSchedule"],
+        streams: ["OrgFeed"],
+      }) {}
       const client = yield* TourApi.clientInProcess;
       const tours = yield* Tour;
       const receipt = yield* tours.send("t-1", new BookTour({ orgId: acme, unit: "1A" }));

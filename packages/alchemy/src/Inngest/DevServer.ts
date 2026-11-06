@@ -6,14 +6,12 @@ import * as ChildProcess from "effect/process/ChildProcess";
 import * as ChildProcessSpawner from "effect/process/ChildProcessSpawner";
 import * as Schedule from "effect/Schedule";
 import * as Stream from "effect/Stream";
-import { FQN_SEPARATOR } from "../FQN.ts";
-import { makeDevLogOpener } from "../Local/DevLog.ts";
 import * as LocalProvider from "../Local/LocalProvider.ts";
 import * as ProviderLayer from "../Local/ProviderLayer.ts";
 import * as Provider from "../Provider.ts";
 import { Resource } from "../Resource.ts";
-import { Stage } from "../Stage.ts";
 import { findAvailablePort, isPortFree, moduleExtension } from "../Util/Node.ts";
+import { makeResourceOutput, type OutputChannel } from "../Util/ResourceOutput.ts";
 import type { Providers } from "./Providers.ts";
 
 export const DEFAULT_DEV_SERVER_PORT = 8288;
@@ -146,9 +144,7 @@ export const DevServerProviderLocal = () =>
     Effect.gen(function* () {
       const spawner = yield* ChildProcessSpawner.ChildProcessSpawner;
       const client = yield* HttpClient.HttpClient;
-      const stage = yield* Stage;
       const path = yield* Path.Path;
-      const openDevLog = yield* makeDevLogOpener;
 
       const notInstalled = (cause: unknown) =>
         new DevServerCommandNotFound({
@@ -212,8 +208,13 @@ export const DevServerProviderLocal = () =>
             findAvailablePort(),
             findAvailablePort(),
           ]);
-          const devLog = yield* openDevLog(stage, ...fqn.split(FQN_SEPARATOR));
-          yield* Effect.log(`[${fqn}] Logs → ${devLog.path}`);
+          const resourceOutput = yield* makeResourceOutput(fqn);
+          yield* Effect.addFinalizer(() =>
+            Effect.sync(() => {
+              resourceOutput.stdout.flush();
+              resourceOutput.stderr.flush();
+            }),
+          );
           const child = yield* spawner.spawn(
             ChildProcess.make(
               command,
@@ -233,19 +234,19 @@ export const DevServerProviderLocal = () =>
             ),
           );
           let output = "";
-          const capture = (stream: typeof child.stdout) =>
-            stream.pipe(
+          const capture = (channel: OutputChannel) =>
+            child[channel].pipe(
               Stream.decodeText,
               Stream.runForEach((text) =>
                 Effect.sync(() => {
                   output = (output + text).slice(-4000);
-                  devLog.write(text);
+                  resourceOutput[channel].push(text);
                 }),
               ),
               Effect.forkScoped,
             );
-          yield* capture(child.stdout);
-          yield* capture(child.stderr);
+          yield* capture("stdout");
+          yield* capture("stderr");
           const url = `http://localhost:${port}`;
           yield* Effect.raceAllFirst([
             awaitHealthy(url).pipe(

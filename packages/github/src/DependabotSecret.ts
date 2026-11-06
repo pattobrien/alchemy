@@ -1,9 +1,11 @@
 import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
+import * as Data from "effect/Data";
 import * as Effect from "effect/Effect";
 import * as Redacted from "effect/Redacted";
-import { gitHubBaseUrlChanged, octokitFor, unlessStatus } from "./Octokit.ts";
+import { gitHubBaseUrlChanged } from "./BaseUrl.ts";
+import { octokitFor, unlessStatus } from "./Octokit.ts";
 import type * as GitHub from "./Providers.ts";
 import { encryptValue } from "./Secret.ts";
 
@@ -97,9 +99,7 @@ export const DependabotSecretProvider = () =>
       yield* upsertSecret(news);
       const observed = yield* readSecret(news);
       if (observed === undefined) {
-        return yield* Effect.fail(
-          new Error(`Dependabot secret ${news.name} is missing right after it was written`),
-        );
+        return yield* new DependabotSecretMissing({ secretName: news.name });
       }
       return observed;
     }),
@@ -115,6 +115,14 @@ export const DependabotSecretProvider = () =>
       );
     }),
   });
+
+export class DependabotSecretMissing extends Data.TaggedError("GitHub.DependabotSecretMissing")<{
+  readonly secretName: string;
+}> {
+  override get message(): string {
+    return `Dependabot secret ${this.secretName} is missing right after it was written`;
+  }
+}
 
 const readSecret = Effect.fn(function* (props: DependabotSecretProps) {
   const octokit = yield* octokitFor(props.baseUrl);

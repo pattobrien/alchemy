@@ -28,7 +28,7 @@ const isNotFound = (error: { readonly _tag: string }) => error._tag === "NotFoun
 
 export const orUndefined = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,
-) => effect.pipe(Effect.catchIf(isNotFound, () => Effect.succeed(undefined)));
+) => effect.pipe(Effect.catchIf(isNotFound, () => Effect.undefined));
 
 export const ignoreNotFound = <A, E extends { readonly _tag: string }, R>(
   effect: Effect.Effect<A, E, R>,

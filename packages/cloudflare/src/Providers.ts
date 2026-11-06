@@ -55,6 +55,10 @@ import * as Devices from "./Devices/index.ts";
 import * as Diagnostics from "./Diagnostics/index.ts";
 import * as Dlp from "./Dlp/index.ts";
 import * as Dns from "./DNS/index.ts";
+import {
+  Backfill as DomainBackfill,
+  BackfillProvider as DomainBackfillProvider,
+} from "./Domain/Backfill.ts";
 import * as Email from "./Email/index.ts";
 import * as Firewall from "./Firewall/index.ts";
 import * as Flagship from "./Flagship/index.ts";
@@ -231,6 +235,7 @@ export const providers = () =>
       Dns.Records,
       Dns.View,
       Dns.ZoneDnsSettings,
+      DomainBackfill,
       Dns.ZoneTransferAcl,
       Dns.ZoneTransferIncoming,
       Dns.ZoneTransferOutgoing,
@@ -244,6 +249,7 @@ export const providers = () =>
       Email.Domain,
       Email.ImpersonationRegistryEntry,
       Email.Routing,
+      Email.RoutingSubdomain,
       Email.Rule,
       Email.SendingSubdomain,
       Email.TrustedDomain,
@@ -509,6 +515,7 @@ export const providers = () =>
           Email.DomainProvider(),
           Email.ImpersonationRegistryEntryProvider(),
           Email.RoutingProvider(),
+          Email.RoutingSubdomainProvider(),
           Email.RuleProvider(),
           Email.SendingSubdomainProvider(),
           Email.TrustedDomainProvider(),
@@ -657,6 +664,7 @@ export const providers = () =>
           Workers.WorkerRouteProvider(),
           WorkersForPlatforms.DispatchNamespaceProvider(),
           Workflows.WorkflowProvider(),
+          DomainBackfillProvider(),
           Zaraz.ConfigProvider(),
           Zone.CustomNameserversProvider(),
           Zone.HoldProvider(),
