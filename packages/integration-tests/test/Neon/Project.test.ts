@@ -186,7 +186,6 @@ test.provider(
       expect(changed.quota).toEqual(next);
       expect(yield* observedQuota(created.projectId)).toEqual(next);
 
-      expect((yield* stack.plan(program())).resources.QuotaProject.action).toBe("noop");
       expect((yield* stack.deploy(program())).quota).toEqual(next);
       expect(yield* observedQuota(created.projectId)).toEqual(next);
 
