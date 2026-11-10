@@ -16,6 +16,7 @@ import {
   listProjects,
   type ListProjectsResponse,
   type Project as NeonProject,
+  type ProjectQuota as NeonProjectQuota,
   createProject as sdkCreateProject,
   updateProject,
 } from "@distilled.cloud/neon";
@@ -50,6 +51,19 @@ export type NeonRegion =
   | "azure-gwc";
 
 export type NeonPgVersion = 14 | 15 | 16 | 17 | 18;
+
+export type ProjectQuota = {
+  /** Wall-clock seconds the project's computes may be active per billing period. */
+  activeTimeSeconds?: number;
+  /** CPU seconds the project's computes may use per billing period. */
+  computeTimeSeconds?: number;
+  /** Bytes that may be written across all branches per billing period. */
+  writtenDataBytes?: number;
+  /** Bytes that may be transferred out through the proxy per billing period. */
+  dataTransferBytes?: number;
+  /** Maximum logical size of each branch, in bytes. */
+  logicalSizeBytes?: number;
+};
 
 export type ProjectProps = {
   /**
@@ -106,6 +120,14 @@ export type ProjectProps = {
    * @see https://neon.tech/docs/guides/logical-replication-neon
    */
   enableLogicalReplication?: boolean;
+  /**
+   * Consumption limits for the project. A limit of `0` or an omitted field is
+   * unlimited. Reaching a limit suspends the project's computes until the
+   * billing period resets. Omitting `quota` leaves the observed quota unchanged.
+   *
+   * @see https://neon.com/docs/guides/consumption-limits
+   */
+  quota?: ProjectQuota;
   /**
    * SQL migrations to apply against the default branch's primary database.
    * Accepts a directory path, a `Drizzle.Schema` resource, or
@@ -166,6 +188,8 @@ export type Project = Resource<
     historyRetentionSeconds: number;
     /** Whether logical replication is enabled. Once enabled it cannot be disabled. */
     enableLogicalReplication: boolean;
+    /** Observed consumption limits, where `0` is unlimited. */
+    quota: Required<ProjectQuota>;
     /** Directory of the applied SQL migrations. */
     migrationsDir: string | undefined;
     /** Migration bookkeeping table. */
@@ -205,6 +229,16 @@ type ProjectAttributes = Project["Attributes"];
  * ```typescript
  * const project = yield* Neon.Project("my-project", {
  *   enableLogicalReplication: true,
+ * });
+ * ```
+ *
+ * **Example:** Project with consumption limits
+ * ```typescript
+ * const project = yield* Neon.Project("my-project", {
+ *   quota: {
+ *     activeTimeSeconds: 36_000,
+ *     computeTimeSeconds: 9_000,
+ *   },
  * });
  * ```
  *
@@ -282,6 +316,12 @@ export const ProjectProvider = () =>
       if (
         news.enableLogicalReplication !== undefined &&
         news.enableLogicalReplication !== (output?.enableLogicalReplication ?? false)
+      ) {
+        return { action: "update" } as const;
+      }
+      if (
+        news.quota !== undefined &&
+        !quotasEqual(normalizeQuota(news.quota), output?.quota ?? normalizeQuota({}))
       ) {
         return { action: "update" } as const;
       }
@@ -365,9 +405,13 @@ export const ProjectProvider = () =>
             },
             history_retention_seconds: news.historyRetentionSeconds,
             org_id: news.orgId,
-            settings: news.enableLogicalReplication
-              ? { enable_logical_replication: true }
-              : undefined,
+            settings:
+              news.enableLogicalReplication || news.quota
+                ? {
+                    enable_logical_replication: news.enableLogicalReplication || undefined,
+                    quota: news.quota && toNeonQuota(normalizeQuota(news.quota)),
+                  }
+                : undefined,
           },
         }).pipe(
           Effect.catchTag("Conflict", (error) =>
@@ -392,10 +436,16 @@ export const ProjectProvider = () =>
         });
       }
       const retention = news.historyRetentionSeconds ?? 86400;
+      const enableReplication = news.enableLogicalReplication === true && !replication;
+      const quota =
+        news.quota && !quotasEqual(normalizeQuota(news.quota), quotaOf(observed))
+          ? toNeonQuota(normalizeQuota(news.quota))
+          : undefined;
       if (
         observed.name !== name ||
         observed.history_retention_seconds !== retention ||
-        (news.enableLogicalReplication === true && !replication)
+        enableReplication ||
+        quota
       ) {
         const updated = yield* updateProject({
           project_id: observed.id,
@@ -404,8 +454,8 @@ export const ProjectProvider = () =>
             history_retention_seconds:
               observed.history_retention_seconds !== retention ? retention : undefined,
             settings:
-              news.enableLogicalReplication === true && !replication
-                ? { enable_logical_replication: true }
+              enableReplication || quota
+                ? { enable_logical_replication: enableReplication || undefined, quota }
                 : undefined,
           },
         });
@@ -620,6 +670,40 @@ const listAllProjects = Effect.gen(function* () {
 
 type ObservedProject = NeonProject | ListProjectsResponse["projects"][number];
 
+const normalizeQuota = (quota: ProjectQuota): Required<ProjectQuota> => ({
+  activeTimeSeconds: quota.activeTimeSeconds ?? 0,
+  computeTimeSeconds: quota.computeTimeSeconds ?? 0,
+  writtenDataBytes: quota.writtenDataBytes ?? 0,
+  dataTransferBytes: quota.dataTransferBytes ?? 0,
+  logicalSizeBytes: quota.logicalSizeBytes ?? 0,
+});
+
+const quotaOf = (project: ObservedProject): Required<ProjectQuota> => {
+  const quota = project.settings?.quota;
+  return normalizeQuota({
+    activeTimeSeconds: quota?.active_time_seconds,
+    computeTimeSeconds: quota?.compute_time_seconds,
+    writtenDataBytes: quota?.written_data_bytes,
+    dataTransferBytes: quota?.data_transfer_bytes,
+    logicalSizeBytes: quota?.logical_size_bytes,
+  });
+};
+
+const toNeonQuota = (quota: Required<ProjectQuota>): NeonProjectQuota => ({
+  active_time_seconds: quota.activeTimeSeconds,
+  compute_time_seconds: quota.computeTimeSeconds,
+  written_data_bytes: quota.writtenDataBytes,
+  data_transfer_bytes: quota.dataTransferBytes,
+  logical_size_bytes: quota.logicalSizeBytes,
+});
+
+const quotasEqual = (a: Required<ProjectQuota>, b: Required<ProjectQuota>) =>
+  a.activeTimeSeconds === b.activeTimeSeconds &&
+  a.computeTimeSeconds === b.computeTimeSeconds &&
+  a.writtenDataBytes === b.writtenDataBytes &&
+  a.dataTransferBytes === b.dataTransferBytes &&
+  a.logicalSizeBytes === b.logicalSizeBytes;
+
 /**
  * Hydrate a project summary (from the list API) into the exact `read`
  * Attributes shape — resolving the default branch, its primary database, and
@@ -676,6 +760,7 @@ const hydrateProjectAttributes = (
       pooledOrigin: parsePostgresOrigin(conn.pooled),
       historyRetentionSeconds: project.history_retention_seconds ?? 86400,
       enableLogicalReplication: project.settings?.enable_logical_replication === true,
+      quota: quotaOf(project),
       migrationsDir: opts.migrationsDir,
       migrationsTable: opts.migrationsTable,
       migrationsHashes: opts.migrationsHashes ?? {},
