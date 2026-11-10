@@ -145,6 +145,88 @@ test.provider(
   { tags: ["provider:neon", "provider:neon:project", "live"] },
 );
 
+const unlimited = {
+  activeTimeSeconds: 0,
+  computeTimeSeconds: 0,
+  writtenDataBytes: 0,
+  dataTransferBytes: 0,
+  logicalSizeBytes: 0,
+};
+
+const observedQuota = (projectId: string) =>
+  getProject({ project_id: projectId }).pipe(
+    Effect.map(({ project }) => ({
+      activeTimeSeconds: project.settings?.quota?.active_time_seconds ?? 0,
+      computeTimeSeconds: project.settings?.quota?.compute_time_seconds ?? 0,
+      writtenDataBytes: project.settings?.quota?.written_data_bytes ?? 0,
+      dataTransferBytes: project.settings?.quota?.data_transfer_bytes ?? 0,
+      logicalSizeBytes: project.settings?.quota?.logical_size_bytes ?? 0,
+    })),
+  );
+
+test.provider(
+  "sets, changes, preserves, and clears the project quota",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const program = (quota?: ProjectProps["quota"]) => Project("QuotaProject", { quota });
+
+      const created = yield* stack.deploy(
+        program({ activeTimeSeconds: 36_000, computeTimeSeconds: 9_000 }),
+      );
+      const initial = { ...unlimited, activeTimeSeconds: 36_000, computeTimeSeconds: 9_000 };
+      expect(created.quota).toEqual(initial);
+      expect(yield* observedQuota(created.projectId)).toEqual(initial);
+
+      const changed = yield* stack.deploy(
+        program({ computeTimeSeconds: 18_000, writtenDataBytes: 1_000_000_000 }),
+      );
+      const next = { ...unlimited, computeTimeSeconds: 18_000, writtenDataBytes: 1_000_000_000 };
+      expect(changed.projectId).toBe(created.projectId);
+      expect(changed.quota).toEqual(next);
+      expect(yield* observedQuota(created.projectId)).toEqual(next);
+
+      expect((yield* stack.deploy(program())).quota).toEqual(next);
+      expect(yield* observedQuota(created.projectId)).toEqual(next);
+
+      const cleared = yield* stack.deploy(program({}));
+      expect(cleared.quota).toEqual(unlimited);
+      expect(yield* observedQuota(created.projectId)).toEqual(unlimited);
+
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:neon", "provider:neon:project", "live"], timeout: 120_000 },
+);
+
+test.provider(
+  "adoption patches a foreign project's differing quota",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+      const name = "alchemy-neon-quota-adoption";
+      const foreign = yield* createProject({
+        project: {
+          name,
+          region_id: "aws-us-east-1",
+          pg_version: 17,
+          settings: { quota: { active_time_seconds: 3_600, data_transfer_bytes: 500_000_000 } },
+        },
+      });
+      yield* waitForOperations(foreign.operations);
+      const program = Project("QuotaAdoptionProject", {
+        name,
+        quota: { activeTimeSeconds: 7_200 },
+      }).pipe(adopt(true));
+      const adopted = yield* stack.deploy(program);
+      const desired = { ...unlimited, activeTimeSeconds: 7_200 };
+      expect(adopted.projectId).toBe(foreign.project.id);
+      expect(adopted.quota).toEqual(desired);
+      expect(yield* observedQuota(foreign.project.id)).toEqual(desired);
+      yield* stack.destroy();
+    }).pipe(logLevel),
+  { tags: ["provider:neon", "provider:neon:project", "live"], timeout: 120_000 },
+);
+
 test.provider(
   "observes project drift, removal, adoption, and missing cached identity",
   (stack) =>
