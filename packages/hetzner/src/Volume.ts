@@ -91,6 +91,13 @@ export interface VolumeProps {
    * @default false
    */
   automount?: boolean;
+  /**
+   * Prevent the Volume from being deleted via the API until this is
+   * cleared. The provider disables protection before delete.
+   *
+   * @default false
+   */
+  deleteProtection?: boolean;
 }
 
 export type Volume = Resource<
@@ -115,6 +122,8 @@ export type Volume = Resource<
     status: VolumeStatus;
     /** Attached Server ID, or `null` if unattached. */
     serverId: number | null;
+    /** Whether delete protection is enabled. */
+    deleteProtection: boolean;
     /** RFC3339 creation timestamp. */
     created: string;
     /** User-defined labels (Alchemy ownership labels stripped). */
@@ -209,6 +218,7 @@ const toAttrs = (volume: CloudVolume): Volume["Attributes"] => ({
   linuxDevice: volume.linux_device,
   status: volume.status,
   serverId: volume.server,
+  deleteProtection: volume.protection.delete,
   created: volume.created,
   labels: userLabels(volume.labels),
 });
@@ -425,6 +435,16 @@ export const VolumeProvider = () =>
           yield* settleAction(action);
           current = yield* waitUntilAvailable(current.id);
         }
+      }
+
+      const desiredProtection = news.deleteProtection ?? false;
+      if (current.protection.delete !== desiredProtection) {
+        const { action } = yield* Hetzner.volumeActions.changeVolumeProtection({
+          id: current.id,
+          delete: desiredProtection,
+        });
+        yield* settleAction(action);
+        current = yield* waitUntilAvailable(current.id);
       }
 
       return toAttrs(current);
