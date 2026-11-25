@@ -30,7 +30,7 @@ env:
 jobs:
   build:
     name: Build and pack
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: namespace-profile-linux-default
     outputs:
       sha: ${{ steps.commit.outputs.sha }}
       version: ${{ steps.release.outputs.version }}
