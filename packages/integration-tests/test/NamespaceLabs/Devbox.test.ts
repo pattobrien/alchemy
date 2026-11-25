@@ -82,5 +82,8 @@ test.provider.skipIf(!hasNamespaceCreds)(
       expect((yield* live(NAME))?.destroyedAt ?? "gone").toBeDefined();
       expect((yield* live(FROM_TEMPLATE))?.destroyedAt ?? "gone").toBeDefined();
     }),
-  { timeout: 180_000 },
+  {
+    timeout: 180_000,
+    tags: ["provider:namespacelabs", "provider:namespacelabs:devbox", "live"],
+  },
 );
