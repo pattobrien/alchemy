@@ -1,0 +1,110 @@
+# pattobrien/alchemy
+
+This repository is a fork of [alchemy-run/alchemy](https://github.com/alchemy-run/alchemy). It
+publishes to GitHub Packages under the `@pattobrien` scope, so projects can use changes that
+upstream has not merged yet.
+
+## What this fork carries
+
+- The Inngest provider in `packages/alchemy/src/Inngest`: `BranchEnvironment`, `App`, `DevServer`,
+  `EventKey`, `SigningKey`, and `Webhook`.
+- The Linear provider in `packages/alchemy/src/Linear`, with its `alchemy provider linear` commands.
+- Inngest and Linear register with the CLI through the `alchemy.contributes` field of
+  `packages/alchemy/package.json`. The Inngest tests are in `packages/integration-tests/test/Inngest`.
+- The `GitHub.App`, `GitHub.AppInstallation`, and `GitHub.DependabotSecret` resources in
+  `packages/github`, with the `alchemy provider github` browser commands, and browser launcher
+  fixes in `packages/alchemy/src/Browser.ts`.
+- The Doppler resources in `packages/doppler`: `Project`, `Environment`, `Config`, `Secret`,
+  `SecretNote`, `ProjectMember`, `ServiceAccount`, `ServiceAccountIdentity`,
+  `ServiceAccountToken`, and `ServiceToken`, and a retried OIDC login in its `AuthProvider`.
+- The Tailscale provider in `packages/tailscale`: `Policy`, with an `AuthProvider` for API access
+  tokens and OAuth clients. Its tests are in `packages/integration-tests/test/Tailscale`.
+- `detectOidcToken` in `packages/alchemy/src/Auth/OidcToken.ts` fails when the GitHub Actions token
+  request fails, so a caller can retry it.
+- `registry` credentials for a `Cloudflare.Container` pre-built `image`, passed to `Docker.image.pull`.
+- Fixes with open upstream PRs: `Artifacts.cached` completes its waiters on failure
+  ([#1853](https://github.com/alchemy-run/alchemy/pull/1853)) and typed Stack stages
+  ([#2131](https://github.com/alchemy-run/alchemy/pull/2131)).
+- The Namespace provider in `packages/namespacelabs`: `RunnerProfile`, `DevboxTemplate`, `Devbox`
+  and `Builder` on the fork's `@distilled.cloud/namespacelabs` SDK, with its `NamespaceLabs` auth
+  provider.
+- `submodules/distilled` points at [pattobrien/distilled](https://github.com/pattobrien/distilled).
+- The release workflow `.github/workflows/release-fork.yml` and its scripts `fork-publish.ts`,
+  `fork-next-version.ts` and `command.ts` in `scripts/release`.
+
+Remove an item once upstream merges its PR and a sync brings the change in.
+
+## Packages
+
+`alchemy` publishes as `@pattobrien/alchemy`. Each non-private `@alchemy.run/<sub>` publishes as
+`@pattobrien/alchemy-<sub>` to `https://npm.pkg.github.com`. Source `package.json` names never
+change. At publish time the release script rewrites workspace dependencies to the same fork version,
+and each `@distilled.cloud/<pkg>` dependency to `npm:@pattobrien/distilled-<pkg>@<version>`.
+`<version>` is the `distilled` field of `scripts/release/fork.json`.
+It also renames the package's own `alchemy.contributes` specifiers to the fork name, because
+contributions resolve only under the publishing package's name.
+
+A fork tag is `v<upstream>-fork.N`, and the published version drops the `v`. `<upstream>` is the
+shared `version` in `packages/*/package.json`, for example `2.0.0-beta.81`. N increases with every
+fork release and never reuses a number that has a tag.
+
+## Cutting a release
+
+Every push to `main` runs `release-fork.yml`, so merging a PR cuts a release. The workflow computes
+the next version with `scripts/release/fork-next-version.ts`: the shared `version` plus `-fork.N`,
+where N is one more than the highest `v*-fork.*` tag on the remote. It runs `pnpm build:pkg`, tags
+the commit `v<version>`, then publishes each package. The publish script skips any package version
+that is already on the registry.
+
+Runs on `main` share one concurrency group, so they run one at a time and no two get the same N.
+Only one run waits at a time. A newer push replaces the waiting run, and its release carries both
+changes.
+
+If pattobrien/distilled has a new fork release, set `distilled` in `scripts/release/fork.json` to
+its version and merge that change into `main`.
+
+Pushing a `v<upstream>-fork.N` tag by hand publishes that exact version. To cut the next fork.N
+from `main` without a merge, run the workflow by hand:
+
+```sh
+gh workflow run release-fork.yml -R pattobrien/alchemy
+```
+
+A run on `main` that fails after it tags leaves that N with some packages missing. Run it again and
+it publishes the same commit as the next N.
+
+To preview the package map and its rewrites, run
+`node scripts/release/fork-publish.ts --dry-run <upstream>-fork.N`.
+
+## Syncing from upstream
+
+Add the upstream remote once with
+`git remote add upstream https://github.com/alchemy-run/alchemy.git`.
+
+1. Create a branch from `main`.
+2. Run `git fetch upstream`, then `git merge --no-ff upstream/main`.
+3. Keep the `submodules/distilled` URL in `.gitmodules` on pattobrien/distilled. Resolve a conflict
+   on the submodule pin to a commit on pattobrien/distilled `main`.
+4. Open a PR into `main`.
+
+Never rebase or force-push `main` or any pushed branch. After a pattobrien/distilled sync lands,
+re-pin the submodule in a PR. Run `git -C submodules/distilled fetch origin`, then
+`git -C submodules/distilled checkout origin/main`, then `git add submodules/distilled`.
+
+## Consuming
+
+Add these lines to the project's `.npmrc`. `NODE_AUTH_TOKEN` must hold a GitHub token with the
+`read:packages` scope.
+
+```ini
+@pattobrien:registry=https://npm.pkg.github.com
+//npm.pkg.github.com/:_authToken=${NODE_AUTH_TOKEN}
+```
+
+Install each package under its upstream name with an npm alias. The alias satisfies peer
+dependencies such as the `alchemy` peer of `@pattobrien/alchemy-better-auth`. Replace `N` with the
+latest published fork number.
+
+```json
+"alchemy": "npm:@pattobrien/alchemy@2.0.0-beta.81-fork.N"
+```
