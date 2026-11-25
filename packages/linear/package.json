@@ -1,6 +1,7 @@
 {
   "name": "@alchemy.run/linear",
   "version": "2.0.0-beta.87",
+  "description": "Linear teams, workflow states, labels, templates, custom views and webhooks for Alchemy.",
   "keywords": [
     "alchemy",
     "effect",
