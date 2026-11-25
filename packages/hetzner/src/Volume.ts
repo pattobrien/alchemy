@@ -51,8 +51,8 @@ export type VolumeServer = { readonly serverId: number };
 
 /**
  * Deletion was refused because the volume has delete protection on, set
- * outside the stack. Turn it off in the Hetzner Console or API before
- * deleting it.
+ * through `deleteProtection` or outside the stack. Turn it off and deploy (or
+ * turn it off in the Hetzner Console) before deleting it.
  */
 export class VolumeDeleteProtected extends Data.TaggedError("Hetzner.VolumeDeleteProtected")<{
   readonly id: number;
@@ -104,6 +104,13 @@ export interface VolumeProps {
    * @default false
    */
   automount?: boolean;
+  /**
+   * Prevent the Volume from being deleted via the API. While it is on,
+   * `destroy` and replacement fail until it is turned off and deployed.
+   *
+   * @default false
+   */
+  deleteProtection?: boolean;
 }
 
 export type Volume = Resource<
@@ -128,6 +135,8 @@ export type Volume = Resource<
     status: VolumeStatus;
     /** Attached Server ID, or `null` if unattached. */
     serverId: number | null;
+    /** Whether delete protection is enabled. */
+    deleteProtection: boolean;
     /** RFC3339 creation timestamp. */
     created: string;
     /** User-defined labels (Alchemy ownership labels stripped). */
@@ -242,6 +251,7 @@ const toAttrs = (volume: CloudVolume): Volume["Attributes"] => ({
   linuxDevice: volume.linux_device,
   status: volume.status,
   serverId: volume.server,
+  deleteProtection: volume.protection.delete,
   created: volume.created,
   labels: userLabels(volume.labels),
 });
@@ -484,6 +494,16 @@ export const VolumeProvider = () =>
         }
       }
 
+      const desiredProtection = news.deleteProtection ?? false;
+      if (current.protection.delete !== desiredProtection) {
+        const { action } = yield* VolumeActions.changeVolumeProtection({
+          id: current.id,
+          delete: desiredProtection,
+        });
+        yield* settleAction(action);
+        current = yield* waitUntilAvailable(current.id);
+      }
+
       return toAttrs(current);
     }),
     delete: Effect.fn(function* ({ output, force }) {
@@ -496,7 +516,7 @@ export const VolumeProvider = () =>
         if (force !== true) {
           return yield* new VolumeDeleteProtected({
             id: current.id,
-            message: `Hetzner volume '${current.id}' has delete protection on. Turn it off in the Hetzner Console or API before deleting it.`,
+            message: `Hetzner volume '${current.id}' has delete protection on. Set \`deleteProtection: false\` and deploy (or turn it off outside the stack) before deleting it.`,
           });
         }
         const { action } = yield* VolumeActions.changeVolumeProtection({
