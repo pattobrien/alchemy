@@ -1204,6 +1204,11 @@ import {
 import { AgentsWebhook, AgentsWebhookProvider } from "./Dialogflow/AgentsWebhook.ts";
 import { SecuritySetting, SecuritySettingProvider } from "./Dialogflow/SecuritySetting.ts";
 import {
+  Domain as DirectoryDomain,
+  DomainProvider as DirectoryDomainProvider,
+} from "./Directory/Domain.ts";
+import { User as DirectoryUser, UserProvider as DirectoryUserProvider } from "./Directory/User.ts";
+import {
   CollectionsDataStore,
   CollectionsDataStoreProvider,
 } from "./DiscoveryEngine/CollectionsDataStore.ts";
@@ -3251,6 +3256,8 @@ const makeProviders = () =>
           InboundOidcSsoProfile,
           InboundSamlSsoProfile,
           InboundSsoAssignment,
+          DirectoryUser,
+          DirectoryDomain,
           CloudchannelCustomer,
           ChannelPartnerLinksCustomer,
           CustomersCustomerRepricingConfig,
@@ -4298,6 +4305,7 @@ const makeProviders = () =>
             InboundSamlSsoProfileProvider(),
             InboundSsoAssignmentProvider(),
           ),
+          Layer.mergeAll(DirectoryUserProvider(), DirectoryDomainProvider()),
           Layer.mergeAll(
             CloudchannelCustomerProvider(),
             ChannelPartnerLinksCustomerProvider(),
