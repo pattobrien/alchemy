@@ -1,6 +1,7 @@
 {
   "name": "@alchemy.run/inngest",
   "version": "2.0.0-beta.87",
+  "description": "Inngest apps, branch environments, event keys, signing keys, webhooks and the local dev server for Alchemy.",
   "keywords": [
     "alchemy",
     "effect",
