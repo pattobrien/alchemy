@@ -8,6 +8,8 @@ import type * as Config from "effect/Config";
 import type * as FileSystem from "effect/FileSystem";
 import * as Layer from "effect/Layer";
 import type * as Path from "effect/Path";
+import { App, AppProvider } from "./App.ts";
+import { AppInstallation, AppInstallationProvider } from "./AppInstallation.ts";
 import { type GitHubAuthOptions, makeGitHubAuth } from "./AuthProvider.ts";
 import { BranchProtection, BranchProtectionProvider } from "./BranchProtection.ts";
 import * as Browser from "./Browser.ts";
@@ -88,6 +90,8 @@ export const providers = (options?: ProvidersOptions) =>
   Layer.effect(
     Providers,
     Provider.collection([
+      App,
+      AppInstallation,
       BranchProtection,
       Collaborator,
       Comment,
@@ -110,6 +114,8 @@ export const providers = (options?: ProvidersOptions) =>
   ).pipe(
     Layer.provide(
       Layer.mergeAll(
+        AppProvider(),
+        AppInstallationProvider(),
         BranchProtectionProvider(),
         CollaboratorProvider(),
         CommentProvider(),

@@ -1,3 +1,5 @@
+export * from "./App.ts";
+export * from "./AppInstallation.ts";
 export * as Auth from "./AuthProvider.ts";
 export * from "./BranchProtection.ts";
 export * as Browser from "./Browser.ts";
