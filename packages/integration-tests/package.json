@@ -143,6 +143,7 @@
     "partyserver": "catalog:",
     "pathe": "catalog:",
     "pg": "catalog:",
+    "playwright-core": "catalog:",
     "prisma": "catalog:",
     "prisma7": "catalog:",
     "react": "catalog:",
