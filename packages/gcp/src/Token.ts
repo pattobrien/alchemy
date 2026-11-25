@@ -22,14 +22,32 @@ export interface MintedToken {
 }
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
-const CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
+export const CLOUD_PLATFORM_SCOPE = "https://www.googleapis.com/auth/cloud-platform";
 
-const signJwt = (sa: ServiceAccountKey, nowMs: number): string => {
+export interface MintOptions {
+  /** OAuth scopes requested for the token. @default [CLOUD_PLATFORM_SCOPE] */
+  readonly scopes?: ReadonlyArray<string>;
+  /** User to impersonate through domain-wide delegation (the JWT `sub` claim). */
+  readonly subject?: string;
+}
+
+export const signServiceAccountJwt = (
+  sa: ServiceAccountKey,
+  nowMs: number,
+  options?: MintOptions,
+): string => {
   const now = Math.floor(nowMs / 1000);
+  const scopes =
+    options?.scopes !== undefined && options.scopes.length > 0
+      ? options.scopes
+      : [CLOUD_PLATFORM_SCOPE];
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
   const signingInput = `${encode({ alg: "RS256", typ: "JWT" })}.${encode({
     iss: sa.client_email,
-    scope: CLOUD_PLATFORM_SCOPE,
+    ...(options?.subject !== undefined && options.subject.length > 0
+      ? { sub: options.subject }
+      : {}),
+    scope: scopes.join(" "),
     aud: sa.token_uri ?? TOKEN_URL,
     iat: now,
     exp: now + 3600,
@@ -44,11 +62,14 @@ const signJwt = (sa: ServiceAccountKey, nowMs: number): string => {
  * Distilled GCP only accepts a bearer token, so Alchemy mints and refreshes
  * it here.
  */
-export const mintAccessToken = (sa: ServiceAccountKey): Effect.Effect<MintedToken, AuthError> =>
+export const mintAccessToken = (
+  sa: ServiceAccountKey,
+  options?: MintOptions,
+): Effect.Effect<MintedToken, AuthError> =>
   Effect.gen(function* () {
     const issuedAt = yield* Clock.currentTimeMillis;
     const jwt = yield* Effect.try({
-      try: () => signJwt(sa, issuedAt),
+      try: () => signServiceAccountJwt(sa, issuedAt, options),
       catch: (cause) =>
         AuthError.make({
           message: "Failed to sign Google service-account JWT",
