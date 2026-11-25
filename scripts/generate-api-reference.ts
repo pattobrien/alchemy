@@ -74,6 +74,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/doppler/src",
   },
   {
+    srcRoot: "packages/namespacelabs/src",
+    providerPrefix: "NamespaceLabs",
+    sourceDisplayPrefix: "packages/namespacelabs/src",
+  },
+  {
     srcRoot: "packages/infisical/src",
     providerPrefix: "Infisical",
     sourceDisplayPrefix: "packages/infisical/src",

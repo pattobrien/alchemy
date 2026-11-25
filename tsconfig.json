@@ -60,6 +60,9 @@
       "path": "./submodules/distilled/packages/digitalocean/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/namespacelabs/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/iceberg/tsconfig.json"
     },
     {
@@ -128,6 +131,9 @@
     },
     {
       "path": "./packages/doppler/tsconfig.json"
+    },
+    {
+      "path": "./packages/namespacelabs/tsconfig.json"
     },
     {
       "path": "./packages/infisical/tsconfig.json"
