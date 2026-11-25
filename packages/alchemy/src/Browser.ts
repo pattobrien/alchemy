@@ -1,0 +1,293 @@
+import * as Context from "effect/Context";
+import * as Data from "effect/Data";
+import * as Duration from "effect/Duration";
+import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
+import * as Layer from "effect/Layer";
+import * as Path from "effect/Path";
+import * as Redacted from "effect/Redacted";
+import * as Schema from "effect/Schema";
+import * as Scope from "effect/Scope";
+import type { BrowserContext, Page } from "playwright-core";
+import { UserFacingError } from "./UserFacingError.ts";
+
+/** Playwright or a usable Chromium could not be loaded or launched. */
+export class BrowserUnavailable extends Data.TaggedError("BrowserUnavailable")<{
+  readonly message: string;
+}> {
+  readonly [UserFacingError] = true;
+}
+
+/** A page driver threw; a full-page screenshot was captured when possible. */
+export class BrowserAutomationFailed extends Data.TaggedError("BrowserAutomationFailed")<{
+  readonly url: string;
+  readonly screenshot: string | undefined;
+  readonly cause: unknown;
+}> {
+  readonly [UserFacingError] = true;
+  override get message(): string {
+    const detail = this.cause instanceof Error ? this.cause.message : String(this.cause);
+    const screenshot =
+      this.screenshot === undefined ? "" : ` Screenshot saved to ${this.screenshot}.`;
+    return `Browser automation failed at ${this.url}: ${detail}.${screenshot}`;
+  }
+}
+
+export type BrowserError = BrowserUnavailable | BrowserAutomationFailed;
+
+class PageCallbackFailed extends Data.TaggedError("PageCallbackFailed")<{
+  readonly cause: unknown;
+}> {}
+
+export interface BrowserProxy {
+  /** Proxy URL, e.g. `http://proxy.example.com:3128` or `socks5://host:1080`. */
+  readonly server: string;
+  readonly username?: string;
+  readonly password?: Redacted.Redacted<string>;
+}
+
+const NameValue = Schema.Struct({ name: Schema.String, value: Schema.String });
+
+export const StorageState = Schema.Struct({
+  cookies: Schema.Struct({
+    ...NameValue.fields,
+    domain: Schema.String,
+    path: Schema.String,
+    expires: Schema.Number,
+    httpOnly: Schema.Boolean,
+    secure: Schema.Boolean,
+    sameSite: Schema.Literals(["Strict", "Lax", "None"]),
+  }).pipe(Schema.Array, Schema.mutable),
+  origins: Schema.Struct({
+    origin: Schema.String,
+    localStorage: NameValue.pipe(Schema.Array, Schema.mutable),
+  }).pipe(Schema.Array, Schema.mutable),
+});
+
+export type StorageState = typeof StorageState.Type;
+
+export interface BrowserConnection {
+  readonly cdpUrl: string;
+  readonly headers?: Readonly<Record<string, string | Redacted.Redacted<string>>>;
+}
+
+interface SessionOptions {
+  /** @default 30 seconds */
+  readonly defaultTimeout?: Duration.Input;
+}
+
+export interface LaunchOptions extends SessionOptions {
+  readonly profileDir: string;
+  /** @default true */
+  readonly headless?: boolean;
+  /** @default "chrome" */
+  readonly channel?: "chrome" | "chromium" | "msedge";
+  /** Route every page through this proxy. */
+  readonly proxy?: BrowserProxy;
+  readonly storageState?: StorageState | string;
+  readonly connect?: never;
+}
+
+export interface ConnectOptions extends SessionOptions {
+  readonly connect: BrowserConnection;
+}
+
+export type BrowserOptions = LaunchOptions | ConnectOptions;
+
+const LAUNCH_ARGS = ["--disable-blink-features=AutomationControlled"];
+
+export class Browser extends Context.Service<
+  Browser,
+  {
+    readonly withPage: <A>(
+      url: string,
+      f: (page: Page) => Promise<A>,
+    ) => Effect.Effect<A, BrowserError>;
+  }
+>()("Alchemy::Browser") {}
+
+const INSTALL_HINT =
+  "Install the optional peer dependency with `pnpm add -D playwright-core` and make sure Google Chrome is installed.";
+
+const isBrowserError = (cause: unknown): cause is BrowserError =>
+  cause instanceof BrowserUnavailable || cause instanceof BrowserAutomationFailed;
+
+const describeCause = (cause: unknown): string =>
+  cause instanceof Error ? cause.message : String(cause);
+
+const launchFailure = (channel: string, cause: unknown): BrowserUnavailable => {
+  const detail = describeCause(cause);
+  return new BrowserUnavailable({
+    message: /executable|not found|is not installed/i.test(detail)
+      ? `Could not launch the '${channel}' browser: ${detail}\n${INSTALL_HINT}`
+      : `Could not launch the '${channel}' browser: ${detail}`,
+  });
+};
+
+const loadPlaywright = Effect.tryPromise({
+  try: () => import("playwright-core"),
+  catch: (cause) =>
+    new BrowserUnavailable({
+      message: `Failed to load 'playwright-core': ${describeCause(cause)}\n${INSTALL_HINT}`,
+    }),
+});
+
+const launchContext = (
+  options: LaunchOptions,
+): Effect.Effect<BrowserContext, BrowserUnavailable, FileSystem.FileSystem | Scope.Scope> =>
+  Effect.gen(function* () {
+    const fs = yield* FileSystem.FileSystem;
+    const channel = options.channel ?? "chrome";
+    const headless = options.headless ?? true;
+    yield* fs.makeDirectory(options.profileDir, { recursive: true, mode: 0o700 }).pipe(
+      Effect.andThen(fs.chmod(options.profileDir, 0o700)),
+      Effect.mapError(
+        (cause) =>
+          new BrowserUnavailable({
+            message: `Could not create the browser profile directory '${options.profileDir}': ${cause.message}`,
+          }),
+      ),
+    );
+    const playwright = yield* loadPlaywright;
+    const context = yield* Effect.acquireRelease(
+      Effect.tryPromise({
+        try: () =>
+          playwright.chromium.launchPersistentContext(options.profileDir, {
+            channel,
+            headless,
+            viewport: null,
+            args: LAUNCH_ARGS,
+            proxy:
+              options.proxy === undefined
+                ? undefined
+                : {
+                    server: options.proxy.server,
+                    username: options.proxy.username,
+                    password:
+                      options.proxy.password === undefined
+                        ? undefined
+                        : Redacted.value(options.proxy.password),
+                  },
+          }),
+        catch: (cause) => launchFailure(channel, cause),
+      }),
+      (context) => Effect.ignore(Effect.tryPromise(() => context.close())),
+    );
+    const storageState = options.storageState;
+    if (storageState !== undefined) {
+      yield* Effect.tryPromise({
+        try: () => context.setStorageState(storageState),
+        catch: (cause) =>
+          new BrowserUnavailable({
+            message: `Could not restore the browser storage state: ${describeCause(cause)}`,
+          }),
+      });
+    }
+    return context;
+  });
+
+const connectContext = (
+  connection: BrowserConnection,
+): Effect.Effect<BrowserContext, BrowserUnavailable, Scope.Scope> =>
+  Effect.gen(function* () {
+    const playwright = yield* loadPlaywright;
+    const browser = yield* Effect.acquireRelease(
+      Effect.tryPromise({
+        try: () =>
+          playwright.chromium.connectOverCDP(connection.cdpUrl, {
+            headers: Object.fromEntries(
+              Object.entries(connection.headers ?? {}).map(([name, value]) => [
+                name,
+                Redacted.isRedacted(value) ? Redacted.value(value) : value,
+              ]),
+            ),
+          }),
+        catch: (cause) =>
+          new BrowserUnavailable({
+            message: `Could not connect to the browser at ${connection.cdpUrl}: ${describeCause(cause)}`,
+          }),
+      }),
+      (browser) => Effect.ignore(Effect.tryPromise(() => browser.close())),
+    );
+    const [context] = browser.contexts();
+    if (context === undefined) {
+      return yield* new BrowserUnavailable({
+        message: `The browser at ${connection.cdpUrl} has no default context`,
+      });
+    }
+    return context;
+  });
+
+const openContext = (options: BrowserOptions) =>
+  (options.connect === undefined ? launchContext(options) : connectContext(options.connect)).pipe(
+    Effect.tap((context) =>
+      Effect.sync(() =>
+        context.setDefaultTimeout(Duration.toMillis(options.defaultTimeout ?? "30 seconds")),
+      ),
+    ),
+  );
+
+export const layer = (
+  options: BrowserOptions,
+): Layer.Layer<Browser, never, FileSystem.FileSystem | Path.Path> =>
+  Layer.effect(
+    Browser,
+    Effect.gen(function* () {
+      const fs = yield* FileSystem.FileSystem;
+      const path = yield* Path.Path;
+      const scope = yield* Effect.scope;
+      const context = yield* Effect.cached(
+        openContext(options).pipe(
+          Scope.provide(scope),
+          Effect.provideService(FileSystem.FileSystem, fs),
+        ),
+      );
+
+      const screenshotOf = (page: Page): Effect.Effect<string | undefined> =>
+        fs.makeTempDirectory({ prefix: "alchemy-browser-" }).pipe(
+          Effect.flatMap((dir) => {
+            const file = path.join(dir, "failure.png");
+            return Effect.tryPromise(() => page.screenshot({ path: file, fullPage: true })).pipe(
+              Effect.as(file),
+            );
+          }),
+          Effect.orElseSucceed(() => undefined),
+        );
+
+      const withPage = <A>(
+        url: string,
+        f: (page: Page) => Promise<A>,
+      ): Effect.Effect<A, BrowserError> =>
+        Effect.gen(function* () {
+          const browser = yield* context;
+          const page = yield* Effect.tryPromise({
+            try: () => browser.newPage(),
+            catch: (cause) =>
+              new BrowserAutomationFailed({
+                url,
+                screenshot: undefined,
+                cause,
+              }),
+          });
+          return yield* Effect.tryPromise({
+            try: async () => {
+              await page.goto(url);
+              await page.waitForLoadState();
+              return await f(page);
+            },
+            catch: (cause) => (isBrowserError(cause) ? cause : new PageCallbackFailed({ cause })),
+          }).pipe(
+            Effect.catchTag("PageCallbackFailed", ({ cause }) =>
+              screenshotOf(page).pipe(
+                Effect.flatMap((screenshot) =>
+                  Effect.fail(new BrowserAutomationFailed({ url, screenshot, cause })),
+                ),
+              ),
+            ),
+            Effect.ensuring(Effect.ignore(Effect.tryPromise(() => page.close()))),
+          );
+        });
+
+      return Browser.of({ withPage });
+    }),
+  );
