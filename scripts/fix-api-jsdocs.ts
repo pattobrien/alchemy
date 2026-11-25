@@ -24,6 +24,7 @@ const packages = [
   "doppler",
   "infisical",
   "1password",
+  "inngest",
   "turso",
   "convex",
   "e2b",
