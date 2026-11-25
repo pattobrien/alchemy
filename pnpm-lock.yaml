@@ -11241,6 +11241,9 @@ importers:
       '@alchemy.run/domain':
         specifier: workspace:*
         version: link:../domain
+      '@alchemy.run/doppler':
+        specifier: workspace:*
+        version: link:../doppler
       '@alchemy.run/drizzle':
         specifier: workspace:*
         version: link:../drizzle
@@ -11349,6 +11352,9 @@ importers:
       '@distilled.cloud/digitalocean':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/digitalocean
+      '@distilled.cloud/doppler':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/doppler
       '@distilled.cloud/e2b':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/e2b
