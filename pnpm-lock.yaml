@@ -11310,6 +11310,9 @@ importers:
       '@alchemy.run/turso':
         specifier: workspace:*
         version: link:../turso
+      '@alchemy.run/vercel':
+        specifier: workspace:*
+        version: link:../vercel
       '@cloudflare/containers':
         specifier: 'catalog:'
         version: 0.3.7
@@ -11394,6 +11397,9 @@ importers:
       '@distilled.cloud/turso':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/turso
+      '@distilled.cloud/vercel':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/vercel
       '@distilled.cloud/zerossl':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/zerossl
@@ -12171,6 +12177,28 @@ importers:
       '@distilled.cloud/turso':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/turso
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-beta
+
+  packages/vercel:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/vercel':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/vercel
     devDependencies:
       '@types/bun':
         specifier: 'catalog:'
