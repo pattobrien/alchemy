@@ -38,6 +38,7 @@ const packages = [
   "prisma",
   "hetzner",
   "digitalocean",
+  "vercel",
   "railway",
   "fly",
   "github",

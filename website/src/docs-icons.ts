@@ -66,6 +66,7 @@ export const TAB_ICONS: Record<string, string | undefined> = {
   "AWS Nitro": b("aws"),
   Prisma: b("prisma"),
   DigitalOcean: b("digitalocean"),
+  Vercel: b("vercel"),
   // Brand-colored marks for marketing surfaces.
   PrismaColor: b("prisma-color"),
   ModalColor: b("modal-color"),
@@ -183,6 +184,7 @@ const GROUP_ICONS: Record<string, string | undefined> = {
   PlanetScale: b("planetscale"),
   Prisma: b("prisma"),
   DigitalOcean: b("digitalocean"),
+  Vercel: b("vercel"),
   Axiom: b("axiom"),
   Docker: b("docker"),
   Kubernetes: b("kubernetes"),

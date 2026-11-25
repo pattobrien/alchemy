@@ -149,6 +149,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/digitalocean/src",
   },
   {
+    srcRoot: "packages/vercel/src",
+    providerPrefix: "Vercel",
+    sourceDisplayPrefix: "packages/vercel/src",
+  },
+  {
     srcRoot: "packages/railway/src",
     providerPrefix: "Railway",
     sourceDisplayPrefix: "packages/railway/src",

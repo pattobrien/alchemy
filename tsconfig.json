@@ -66,6 +66,9 @@
       "path": "./submodules/distilled/packages/namespacelabs/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/vercel/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/iceberg/tsconfig.json"
     },
     {
@@ -197,6 +200,9 @@
     },
     {
       "path": "./packages/digitalocean/tsconfig.json"
+    },
+    {
+      "path": "./packages/vercel/tsconfig.json"
     },
     {
       "path": "./packages/railway/tsconfig.json"

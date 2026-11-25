@@ -1,0 +1,88 @@
+---
+title: Vercel
+description: Vercel teams, projects, domains, and DNS records as Stack resources.
+---
+
+Vercel builds and serves apps from Git. With alchemy, the configuration
+around those builds is code: which team owns a project, which repository
+and framework it builds from, which domains it serves, and the DNS
+records of domains that use Vercel nameservers.
+
+New here? [Set up credentials](/vercel/setup) first.
+
+## Resources
+
+A `Team` references an existing team. It never creates or deletes one,
+so the first deploy adopts it:
+
+```typescript
+const team = yield* Vercel.Team("Team", { slug: "my-team" }).pipe(Alchemy.adopt(true));
+```
+
+A `Project` builds an app from a repository:
+
+```typescript
+const project = yield* Vercel.Project("Web", {
+  teamId: team.teamId,
+  framework: "nextjs",
+  rootDirectory: "apps/web",
+  gitRepository: { type: "github", repo: "my-org/my-repo" },
+});
+```
+
+:::caution
+Changing `teamId` or `gitRepository` is a **replacement**. The Vercel
+API cannot move a project or relink its repository, so the old project
+and its deployments are deleted.
+:::
+
+A `ProjectDomain` assigns a domain to the project. Domains outside
+Vercel DNS stay unverified until the records in `verification` are
+published:
+
+```typescript
+yield* Vercel.ProjectDomain("WebDomain", {
+  project: project.projectId,
+  teamId: team.teamId,
+  name: "www.example.com",
+});
+```
+
+A `DnsRecord` manages a record in a domain that uses Vercel DNS:
+
+```typescript
+yield* Vercel.DnsRecord("Api", {
+  domain: "example.com",
+  teamId: team.teamId,
+  name: "api",
+  type: "A",
+  value: "203.0.113.10",
+});
+```
+
+## Adoption
+
+Vercel projects, domains, and DNS records carry no tags. A resource
+that already exists before the first deploy is reported as unowned,
+and the deploy refuses it until you pipe it through
+`Alchemy.adopt(true)`. That includes the `<project-name>.vercel.app`
+domain Vercel assigns to every new project.
+
+## Out of scope
+
+- **Spend management.** The Vercel REST API has no endpoint to read or
+  change spend limits. `Team` exposes only its `plan` as a read-only
+  attribute.
+- **Deployments.** A deployment is a build of one commit, triggered by
+  pushes to the connected repository or by the Vercel CLI. It is build
+  output, not configuration, so it has no desired state to converge.
+- **Environment variables.** Their values are secrets that belong to
+  each deployment environment. Manage them in the Vercel dashboard or
+  with `vercel env` until a resource for them ships.
+
+## Reference
+
+[Team](/providers/vercel/team) ·
+[Project](/providers/vercel/project) ·
+[ProjectDomain](/providers/vercel/projectdomain) ·
+[DnsRecord](/providers/vercel/dnsrecord)
