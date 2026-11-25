@@ -1,0 +1,58 @@
+import * as GitHub from "@alchemy.run/github";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Actions from "@distilled.cloud/github/actions";
+import * as Dependabot from "@distilled.cloud/github/dependabot";
+import * as Effect from "effect/Effect";
+import * as Redacted from "effect/Redacted";
+import { MinimumLogLevel } from "effect/References";
+import { gh } from "./scope.ts";
+
+const { test } = Test.make({ providers: GitHub.providers() });
+
+const logLevel = Effect.provideService(MinimumLogLevel, process.env.DEBUG ? "Debug" : "Info");
+
+const owner = process.env.GITHUB_TEST_OWNER ?? "alchemy-run-test";
+const repository = process.env.GITHUB_TEST_REPOSITORY ?? "test-repo";
+
+const dependabotSecretUpdatedAt = (name: string) =>
+  gh(Dependabot.getRepoSecret({ owner, repo: repository, secret_name: name })).pipe(
+    Effect.map((secret) => secret.updated_at),
+    Effect.catchTag("NotFound", () => Effect.undefined),
+  );
+
+const actionsSecretExists = (name: string) =>
+  gh(Actions.getRepoSecret({ owner, repo: repository, secret_name: name })).pipe(
+    Effect.as(true),
+    Effect.catchTag("NotFound", () => Effect.succeed(false)),
+  );
+
+test.provider.skipIf(!owner)(
+  "DependabotSecret stores the value in the Dependabot store and removes it on destroy",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* stack.destroy();
+
+      const secret = yield* stack.deploy(
+        GitHub.DependabotSecret("DependabotSecret", {
+          owner,
+          repository,
+          name: "ALCHEMY_DEPENDABOT_SECRET",
+          value: Redacted.make("hunter2"),
+        }),
+      );
+
+      expect(secret.updatedAt).toEqual(
+        yield* dependabotSecretUpdatedAt("ALCHEMY_DEPENDABOT_SECRET"),
+      );
+      expect(yield* actionsSecretExists("ALCHEMY_DEPENDABOT_SECRET")).toBe(false);
+
+      yield* stack.destroy();
+
+      expect(yield* dependabotSecretUpdatedAt("ALCHEMY_DEPENDABOT_SECRET")).toBeUndefined();
+    }).pipe(logLevel),
+  {
+    tags: ["provider:github", "provider:github:dependabot-secret", "live"],
+    timeout: 120_000,
+  },
+);
