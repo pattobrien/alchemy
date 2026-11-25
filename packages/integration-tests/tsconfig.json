@@ -94,6 +94,7 @@
   "references": [
     { "path": "../alchemy/tsconfig.json" },
     { "path": "../1password/tsconfig.json" },
+    { "path": "../inngest/tsconfig.json" },
     { "path": "../sql/tsconfig.json" },
     { "path": "../redis/tsconfig.json" },
     { "path": "../docker/tsconfig.json" },
@@ -106,6 +107,7 @@
     { "path": "../acme/tsconfig.json" },
     { "path": "../drizzle/tsconfig.json" },
     { "path": "../axiom/tsconfig.json" },
+    { "path": "../linear/tsconfig.json" },
     { "path": "../convex/tsconfig.json" },
     { "path": "../rivet/tsconfig.json" },
     {
@@ -123,10 +125,14 @@
     { "path": "../prisma/tsconfig.json" },
     { "path": "../hetzner/tsconfig.json" },
     { "path": "../digitalocean/tsconfig.json" },
+    { "path": "../vercel/tsconfig.json" },
     { "path": "../railway/tsconfig.json" },
     { "path": "../fly/tsconfig.json" },
     { "path": "../github/tsconfig.json" },
+    { "path": "../namespacelabs/tsconfig.json" },
+    { "path": "../doppler/tsconfig.json" },
     { "path": "../stripe/tsconfig.json" },
+    { "path": "../tailscale/tsconfig.json" },
     { "path": "../cloudflare/tsconfig.json" }
   ]
 }

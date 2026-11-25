@@ -12,6 +12,7 @@ allowBuilds:
   # RivetKit's cbor-x: an optional native speedup; cbor-x falls back to JS.
   cbor-extract: false
   esbuild: true
+  inngest-cli: true
   sharp: true
   vue-demi: false
   workerd: true
@@ -191,6 +192,8 @@ catalog:
   hono: "^4.12.14"
   http-cache-semantics: "^4.3.0"
   husky: "^9.1.7"
+  inngest: "^4.21.1"
+  inngest-cli: "1.45.1"
   iovalkey: "^0.3.3"
   isbot: "^5.2.2"
   itty-time: "^2.0.2"
@@ -214,6 +217,7 @@ catalog:
   pathe: "^2.0.3"
   pg: "^8.22.0"
   picomatch: "^4.0.7"
+  playwright-core: "^1.64.0"
   postal-mime: "^2.4.3"
   postcss: "^8.5.29"
   react: "^19.3.1"

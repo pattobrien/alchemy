@@ -86,6 +86,7 @@ export const DOCS_TABS: DocsTab[] = [
   hub("DigitalOcean", "digitalocean", "Clouds", "droplets · ssh keys · firewalls", [
     "/providers/digitalocean",
   ]),
+  hub("Vercel", "vercel", "Clouds", "projects · domains · DNS", ["/providers/vercel"]),
 
   hub("PlanetScale", "planetscale", "Databases", "MySQL · Postgres · branches", [
     "/providers/planetscale",

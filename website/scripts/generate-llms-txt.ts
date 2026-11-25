@@ -77,6 +77,7 @@ const SECTIONS: Section[] = [
         "cli/inspecting-state",
         "cli/aws",
         "cli/cloudflare",
+        "cli/github",
       ],
     },
   },
@@ -529,6 +530,12 @@ const SECTIONS: Section[] = [
   {
     heading: "DigitalOcean — Frontend",
     pages: { directory: "digitalocean/frontend" },
+  },
+  {
+    heading: "Vercel",
+    intro:
+      "Teams, projects, domains, and Vercel DNS records as Stack resources. Spend management, deployments, and environment variables are out of scope.",
+    pages: { slugs: ["vercel/index", "vercel/setup"] },
   },
   {
     heading: "PlanetScale",

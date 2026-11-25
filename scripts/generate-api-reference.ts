@@ -74,9 +74,24 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/doppler/src",
   },
   {
+    srcRoot: "packages/namespacelabs/src",
+    providerPrefix: "NamespaceLabs",
+    sourceDisplayPrefix: "packages/namespacelabs/src",
+  },
+  {
+    srcRoot: "packages/tailscale/src",
+    providerPrefix: "Tailscale",
+    sourceDisplayPrefix: "packages/tailscale/src",
+  },
+  {
     srcRoot: "packages/infisical/src",
     providerPrefix: "Infisical",
     sourceDisplayPrefix: "packages/infisical/src",
+  },
+  {
+    srcRoot: "packages/linear/src",
+    providerPrefix: "Linear",
+    sourceDisplayPrefix: "packages/linear/src",
   },
   {
     srcRoot: "packages/archil/src",
@@ -92,6 +107,11 @@ const sourceRoots: SourceRoot[] = [
     srcRoot: "packages/1password/src",
     providerPrefix: "1Password",
     sourceDisplayPrefix: "packages/1password/src",
+  },
+  {
+    srcRoot: "packages/inngest/src",
+    providerPrefix: "Inngest",
+    sourceDisplayPrefix: "packages/inngest/src",
   },
   {
     srcRoot: "packages/turso/src",
@@ -137,6 +157,11 @@ const sourceRoots: SourceRoot[] = [
     srcRoot: "packages/digitalocean/src",
     providerPrefix: "DigitalOcean",
     sourceDisplayPrefix: "packages/digitalocean/src",
+  },
+  {
+    srcRoot: "packages/vercel/src",
+    providerPrefix: "Vercel",
+    sourceDisplayPrefix: "packages/vercel/src",
   },
   {
     srcRoot: "packages/railway/src",

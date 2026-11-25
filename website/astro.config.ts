@@ -40,6 +40,7 @@ function providersSidebarEntry() {
       { label: "Fly", link: "/fly" },
       { label: "Railway", link: "/railway" },
       { label: "DigitalOcean", link: "/digitalocean" },
+      { label: "Vercel", link: "/vercel" },
       { label: "PlanetScale", link: "/planetscale" },
       { label: "Neon", link: "/neon" },
       { label: "Turso", link: "/turso" },
@@ -557,6 +558,7 @@ export default defineConfig({
               items: [
                 { label: "aws", link: "/cli/aws" },
                 { label: "cloudflare", link: "/cli/cloudflare" },
+                { label: "github", link: "/cli/github" },
               ],
             },
             { label: "Migrating from v1", link: "/migrating-from-v1" },
@@ -1430,6 +1432,14 @@ export default defineConfig({
               ]),
             },
             providerResourcesEntry("DigitalOcean"),
+          ],
+        },
+        {
+          label: "Vercel",
+          items: [
+            { label: "Overview", link: "/vercel" },
+            { label: "Setup", link: "/vercel/setup" },
+            providerResourcesEntry("Vercel"),
           ],
         },
         {

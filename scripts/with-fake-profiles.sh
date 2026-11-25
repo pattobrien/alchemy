@@ -21,6 +21,8 @@ export AXIOM_TOKEN=alchemy-fake-local-axiom-token
 export AXIOM_API_KEY="$AXIOM_TOKEN"
 export AXIOM_ORG_ID=alchemy-local
 
+export VERCEL_TOKEN=alchemy-fake-local-vercel-token
+
 export CLOUDFLARE_ACCOUNT_ID=00000000000000000000000000000000
 export CLOUDFLARE_API_TOKEN=alchemy-fake-local-cloudflare-token
 export CLOUDFLARE_API_KEY=alchemy-fake-local-cloudflare-key
@@ -42,6 +44,7 @@ export DAYTONA_API_KEY=alchemy-fake-local-daytona-key
 export MODAL_TOKEN_ID=ak-alchemy-fake-local
 export MODAL_TOKEN_SECRET=as-alchemy-fake-local
 export INFISICAL_TOKEN=alchemy-fake-local-infisical-token
+export LINEAR_API_KEY=alchemy-fake-local-linear-key
 export CONVEX_ACCESS_TOKEN=alchemy-fake-local-convex-token
 export NEON_API_KEY=alchemy-fake-local-neon-key
 export ARCHIL_API_KEY=alchemy-fake-local-archil-key

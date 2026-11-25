@@ -29,6 +29,7 @@ Every command runs through your package manager: bun alchemy <command>. Command 
 - [Inspecting State](https://alchemy.run/cli/inspecting-state) — See what alchemy thinks is deployed, debug a bad diff, and recover from bad state.
 - [aws](https://alchemy.run/cli/aws) — AWS provider commands — bootstrap the per-account assets bucket that Lambda deployments rely on.
 - [cloudflare](https://alchemy.run/cli/cloudflare) — Cloudflare provider commands — mint API tokens.
+- [github](https://alchemy.run/cli/github) — GitHub provider commands — sign in to GitHub's web UI once so deploys can drive it unattended.
 
 ## Infrastructure as Code
 
@@ -710,6 +711,13 @@ DigitalOcean: App Platform runtimes and Functions, Droplets, Kubernetes, MicroVM
 - [Foldkit](https://alchemy.run/digitalocean/frontend/foldkit) — Deploy a Foldkit app to DigitalOcean App Platform with DigitalOcean.Website.Foldkit, built on your machine and served by an App, with Foldkit's own dev server under alchemy dev.
 - [Octane](https://alchemy.run/digitalocean/frontend/octane) — Deploy a Octane app to DigitalOcean App Platform with DigitalOcean.Website.Octane, built on your machine and served by an App, with Octane's own dev server under alchemy dev.
 - [Websites](https://alchemy.run/digitalocean/frontend/websites) — Deploy Astro, Next.js, Nuxt, SvelteKit, SolidStart, React Router, TanStack Start, Waku, Vinext, Vite, Vocs, Foldkit, Octane and static sites to DigitalOcean App Platform from one Stack.
+
+## Vercel
+
+Teams, projects, domains, and Vercel DNS records as Stack resources. Spend management, deployments, and environment variables are out of scope.
+
+- [Vercel](https://alchemy.run/vercel) — Vercel teams, projects, domains, and DNS records as Stack resources.
+- [Setup](https://alchemy.run/vercel/setup) — Connect alchemy to Vercel — access token, profiles, and CI.
 
 ## PlanetScale
 
@@ -1399,4 +1407,4 @@ A domain-driven design framework: model commands, events, aggregates, views, pro
 
 Service-level API reference, generated from JSDoc on the source `.ts` files via `bun scripts/generate-api-reference.ts`. Each page groups resources and capabilities by service, with a heading per resource and examples extracted from source JSDoc.
 
-The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~295 KB) — only fetch it when you need to locate a specific resource's reference page.
+The service-level pages are indexed in [llms-full.txt](https://alchemy.run/llms-full.txt), which repeats this entire file plus one link per service. Warning: it is large (~298 KB) — only fetch it when you need to locate a specific resource's reference page.

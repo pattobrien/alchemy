@@ -458,8 +458,11 @@ export const LocalWorkerProvider = () =>
           }
           durableObjectNamespaces[className].container = dev;
         }
-        const dev: DevServerOptions | { readonly mode: "external"; readonly url?: string } =
-          props.dev?.mode === "external"
+        const dev:
+          | DevServerOptions
+          | { readonly mode: "external"; readonly url?: string }
+          | { readonly mode: "attach"; readonly url: string } =
+          props.dev?.mode === "external" || props.dev?.mode === "attach"
             ? props.dev
             : {
                 ...props.dev,
@@ -592,7 +595,7 @@ export const LocalWorkerProvider = () =>
         return yield* materializeRuntimeBindings(
           {
             ...config,
-            devAccess: config.dev.mode === "external" ? undefined : config.dev.access,
+            devAccess: config.dev.mode === "worker" ? config.dev.access : undefined,
           },
           {
             accountId,
@@ -600,6 +603,52 @@ export const LocalWorkerProvider = () =>
             stack: { name: stack.name, stage: stack.stage },
           },
         );
+      });
+
+      /** The plain-data config a Vite child, or an attach-mode host, runs the Worker from. */
+      const hostConfig = Effect.fn(function* (
+        worker: WorkerConfig,
+        options: {
+          rootDir: string;
+          publicUrl: string;
+          source: ViteChildConfig["source"];
+          queueConsumers: RuntimeQueueConsumer[];
+        },
+      ) {
+        const devServer = worker.dev.mode === "worker" ? worker.dev : undefined;
+        return {
+          rootDir: options.rootDir,
+          publicUrl: options.publicUrl,
+          accountId: yield* localAccountId,
+          storageDirectory,
+          stack: { name: stack.name, stage: stack.stage },
+          // Already resolved to plain values by `start` (`Worker.URL`
+          // sentinels substituted); Redacted unwraps at the process
+          // boundary inside `startViteChild`.
+          env: worker.env ?? {},
+          source: options.source,
+          worker: {
+            name: worker.name,
+            compatibility: worker.compatibility,
+            main: worker.vite ? worker.viteMain : worker.bundleOptions.main,
+            viteEnvironments: worker.viteEnvironments,
+            hasAssets: worker.hasAssets,
+            bindingDescriptors: worker.bindingDescriptors,
+            devRemote: worker.devRemote,
+            devAccess: devServer?.access,
+            durableObjectNamespaces: worker.durableObjectNamespaces,
+            workflows: worker.workflows,
+            hyperdrives: worker.hyperdrives,
+            queueConsumers: options.queueConsumers,
+            crons: worker.crons,
+            tails: worker.tailConsumers?.map((c) => c.service),
+            streamingTails: worker.streamingTailConsumers?.map((c) => c.service),
+            cache: devServer?.cache,
+            cf: devServer?.cf,
+            workerd: devServer?.workerd,
+            assets: yield* toRuntimeAssets(worker.assets),
+          },
+        } satisfies ViteChildConfig;
       });
 
       // Latest successful serve per worker FQN, so runtime wiring changes
@@ -1273,7 +1322,6 @@ export const LocalWorkerProvider = () =>
               // The dev server and its workerd run in a child process rooted
               // at the app.
               const root = path.resolve(initialCwd, rootDir ?? ".");
-              const accountId = yield* localAccountId;
               // Queue-consumer wiring can change while the child is starting
               // (a sibling `Consumer` reconcile), before the restart hook
               // below exists to pick it up. We hold the serve lock, so a
@@ -1289,40 +1337,12 @@ export const LocalWorkerProvider = () =>
                 const logResourceOutput = makeResourceLogger(worker.fqn);
                 const child = yield* restore(
                   startViteChild(
-                    {
+                    yield* hostConfig(worker, {
                       rootDir: root,
                       publicUrl: proxy.url.toString().replace(/\/$/, ""),
-                      accountId,
-                      storageDirectory,
-                      stack: { name: stack.name, stage: stack.stage },
-                      // Already resolved to plain values by `start`
-                      // (`Worker.URL` sentinels substituted); Redacted
-                      // unwraps at the process boundary inside
-                      // `startViteChild`.
-                      env: worker.env ?? {},
                       source,
-                      worker: {
-                        name: worker.name,
-                        compatibility: worker.compatibility,
-                        main: worker.viteMain,
-                        viteEnvironments: worker.viteEnvironments,
-                        hasAssets: worker.hasAssets,
-                        bindingDescriptors: worker.bindingDescriptors,
-                        devRemote: worker.devRemote,
-                        devAccess: worker.dev.access,
-                        durableObjectNamespaces: worker.durableObjectNamespaces,
-                        workflows: worker.workflows,
-                        hyperdrives: worker.hyperdrives,
-                        queueConsumers,
-                        crons: worker.crons,
-                        tails: worker.tailConsumers?.map((c) => c.service),
-                        streamingTails: worker.streamingTailConsumers?.map((c) => c.service),
-                        cache: worker.dev.cache,
-                        cf: worker.dev.cf,
-                        workerd: worker.dev.workerd,
-                        assets: yield* toRuntimeAssets(worker.assets),
-                      },
-                    },
+                      queueConsumers,
+                    }),
                     logResourceOutput,
                   ).pipe(Scope.provide(scope)),
                 ).pipe(
@@ -1488,7 +1508,7 @@ export const LocalWorkerProvider = () =>
           }
           const accountId = yield* localAccountId;
           const urls =
-            news.dev?.mode === "external"
+            news.dev?.mode === "external" || news.dev?.mode === "attach"
               ? // news.dev.url may be an unresolved output; avoid trying to resolve it here.
                 []
               : yield* maybeStartProxy(fqn, {
@@ -1547,6 +1567,60 @@ export const LocalWorkerProvider = () =>
               crons: config.crons,
               tailConsumers: config.tailConsumers,
               streamingTailConsumers: config.streamingTailConsumers,
+            } satisfies Worker["Attributes"];
+          }
+
+          // The host process owns the runtime: report its URL and hand it the
+          // config a Vite child would get, without starting anything here.
+          if (config.dev.mode === "attach") {
+            dropServeState(fqn);
+            yield* closeWorkerd(fqn);
+            yield* edge.removeRoutes(fqn);
+            yield* releaseEdgeDomain(fqn);
+            const url = config.dev.url;
+            const env =
+              config.env &&
+              Object.fromEntries(
+                Object.entries(config.env).map(([key, value]) => [
+                  key,
+                  isSelfUrl(value) ? url : value,
+                ]),
+              );
+            const serverSource = config.source?.devMode === "server" ? config.source : undefined;
+            return {
+              workerId: `dev:${config.name}`,
+              workerName: config.name,
+              namespace: undefined,
+              logpush: undefined,
+              url,
+              urls: [url],
+              domain: undefined,
+              tags: [],
+              durableObjectNamespaces: {},
+              accountId,
+              routes: [],
+              crons: config.crons,
+              tailConsumers: config.tailConsumers,
+              streamingTailConsumers: config.streamingTailConsumers,
+              hostConfig: yield* hostConfig(
+                { ...config, env },
+                {
+                  rootDir: path.resolve(
+                    initialCwd,
+                    (serverSource ? serverSource.rootDir : config.viteRootDir) ?? ".",
+                  ),
+                  publicUrl: url,
+                  source: serverSource
+                    ? {
+                        descriptor: serverSource,
+                        id: config.id,
+                        fqn: config.fqn,
+                        assets: config.assets,
+                      }
+                    : undefined,
+                  queueConsumers: yield* getQueueConsumers(config.name),
+                },
+              ),
             } satisfies Worker["Attributes"];
           }
 
