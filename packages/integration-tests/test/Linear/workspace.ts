@@ -1,3 +1,4 @@
+import { listOAuthApps, readOAuthApp } from "@alchemy.run/linear/WebFlows";
 import { Query } from "@distilled.cloud/core/query";
 import {
   Linear,
@@ -157,3 +158,13 @@ export const createWebhook = Query.fn(
 );
 
 export const deleteWebhook = Query.fn((id: string) => Linear.webhookDelete({ id }).success);
+
+export const oauthApp = (id: string) =>
+  readOAuthApp("finedesigns-test", id).pipe(
+    Effect.flatMap(Effect.fromNullishOr),
+    Effect.map((app) => ({ ...app.settings, clientId: app.clientId })),
+  );
+
+export const oauthAppIds = listOAuthApps("finedesigns-test").pipe(
+  Effect.map((apps) => apps.map((app) => app.id)),
+);
