@@ -651,7 +651,7 @@ export const LiveContainerProvider = () =>
           // to pull from, so when the pull fails and the image is present
           // locally, publish the local copy.
           const usedLocalImage = yield* docker.image
-            .pull(build.image, platform, undefined, session)
+            .pull(build.image, platform, undefined, session, props.registry)
             .pipe(
               Effect.as(false),
               Effect.catch((pullError) =>

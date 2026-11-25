@@ -708,7 +708,8 @@ type ContainerShape<Shape> = {
  *
  * Alchemy pulls an `image` as `linux/amd64` on every deploy and every
  * `alchemy dev` start, so a mutable tag like `:latest` picks up a newly
- * pushed image. A private registry needs a `docker login` first.
+ * pushed image. A private registry needs `registry` credentials or a
+ * `docker login` first.
  *
  * **Example:** Image built on this machine
  * ```typescript
@@ -727,6 +728,19 @@ type ContainerShape<Shape> = {
  * Alchemy fails with the image name and the commands that fix it. The
  * image name alone is the identity, so rebuilding under the same tag does
  * not redeploy; give each build its own tag.
+ *
+ * **Example:** Private remote image (`image` with `registry`)
+ * ```typescript
+ * // The pull authenticates with these credentials; no `docker login` needed.
+ * export class Sandbox extends Cloudflare.Container<Sandbox>()("Sandbox", {
+ *   image: "ghcr.io/acme/sandbox:latest",
+ *   registry: {
+ *     server: "ghcr.io",
+ *     username: "octocat",
+ *     password: Config.Redacted("GHCR_TOKEN"),
+ *   },
+ * }) {}
+ * ```
  *
  * **Example:** Reaching an arbitrary image's port from a Durable Object
  * ```typescript
