@@ -6,4 +6,13 @@ export default Contributions.make({
     () => import("./AuthProvider.ts"),
     (module) => module.GitHubAuth,
   ),
+  cli: {
+    provider: {
+      description: "Manage GitHub provider prerequisites",
+      load: Contributions.lazy(
+        () => import("./Cli.ts"),
+        (module) => module.githubCommand,
+      ),
+    },
+  },
 });
