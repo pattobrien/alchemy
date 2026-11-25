@@ -175,6 +175,7 @@
     "hono": "catalog:",
     "next": "catalog:",
     "nuxt": "catalog:",
+    "playwright-core": "catalog:",
     "react": "catalog:",
     "react-devtools-core": "catalog:",
     "solid-js": "catalog:",
@@ -189,6 +190,7 @@
     "@effect/platform-bun": "catalog:",
     "@effect/platform-node": "catalog:",
     "effect": "catalog:",
+    "playwright-core": "catalog:",
     "vite": "catalog:frontend-peer",
     "ws": "catalog:"
   },
@@ -200,6 +202,9 @@
       "optional": true
     },
     "@effect/platform-node": {
+      "optional": true
+    },
+    "playwright-core": {
       "optional": true
     },
     "vite": {
