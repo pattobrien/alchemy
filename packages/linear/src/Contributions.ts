@@ -6,4 +6,13 @@ export default Contributions.make({
     () => import("./AuthProvider.ts"),
     (module) => module.LinearAuth,
   ),
+  cli: {
+    provider: {
+      description: "Manage Linear provider prerequisites",
+      load: Contributions.lazy(
+        () => import("./Cli.ts"),
+        (module) => module.linearCommand,
+      ),
+    },
+  },
 });
