@@ -51,6 +51,7 @@ test.provider(
       expect(created.locationId).toEqual(expect.any(Number));
       expect(created.linuxDevice).toMatch(/^\/dev\//);
       expect(created.serverId).toBeNull();
+      expect(created.deleteProtection).toEqual(false);
       expect(created.labels).toMatchObject({ env: "test" });
 
       const fetched = yield* volumes.getVolume({
@@ -62,6 +63,7 @@ test.provider(
       expect(fetched.volume.location.name).toEqual("nbg1");
       expect(fetched.volume.linux_device).toEqual(created.linuxDevice);
       expect(fetched.volume.server).toBeNull();
+      expect(fetched.volume.protection.delete).toEqual(false);
       expect(fetched.volume.labels.env).toEqual("test");
 
       const updated = yield* stack.deploy(
@@ -71,6 +73,7 @@ test.provider(
             format: "ext4",
             location: "nbg1",
             labels: { env: "prod", role: "data" },
+            deleteProtection: true,
           });
         }),
       );
@@ -78,6 +81,7 @@ test.provider(
       expect(updated.id).toEqual(created.id);
       expect(updated.linuxDevice).toEqual(created.linuxDevice);
       expect(updated.size).toEqual(20);
+      expect(updated.deleteProtection).toEqual(true);
       expect(updated.labels).toMatchObject({ env: "prod", role: "data" });
 
       const refetched = yield* volumes.getVolume({
@@ -85,8 +89,28 @@ test.provider(
       });
       expect(refetched.volume.size).toEqual(20);
       expect(refetched.volume.linux_device).toEqual(created.linuxDevice);
+      expect(refetched.volume.protection.delete).toEqual(true);
       expect(refetched.volume.labels.env).toEqual("prod");
       expect(refetched.volume.labels.role).toEqual("data");
+
+      yield* expectDeleteRefused(stack, {
+        logicalId: "Data",
+        tag: "Hetzner.VolumeDeleteProtected",
+      });
+      const unprotected = yield* stack.deploy(
+        Effect.gen(function* () {
+          return yield* Hetzner.Volume("Data", {
+            size: 20,
+            format: "ext4",
+            location: "nbg1",
+            labels: { env: "prod", role: "data" },
+            deleteProtection: false,
+          });
+        }),
+      );
+      expect(unprotected.deleteProtection).toEqual(false);
+      const unprotectedVolume = yield* volumes.getVolume({ id: updated.id });
+      expect(unprotectedVolume.volume.protection.delete).toEqual(false);
 
       // Delete protection turned on outside the stack refuses the destroy too:
       // the provider never lifts it. Turn it off the same way, then destroy.
