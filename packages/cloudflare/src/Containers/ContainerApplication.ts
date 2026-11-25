@@ -2,6 +2,7 @@ import type { BuildCacheOptions } from "@alchemy.run/docker/BuildCache";
 import type { ContainerRuntime } from "@alchemy.run/docker/ContainerRuntime";
 import type { InlineDockerfile } from "@alchemy.run/docker/Dockerfile";
 import type { DockerfileBuild, DockerfileBuildOptions } from "@alchemy.run/docker/ImageSource";
+import type { ImageRegistry } from "@alchemy.run/docker/Registry";
 import * as Containers from "@distilled.cloud/cloudflare/containers";
 import type * as Bundle from "alchemy/Bundle/Bundle";
 import * as ProviderLayer from "alchemy/Local/ProviderLayer";
@@ -430,6 +431,8 @@ export interface RemoteContainerProps extends ContainerApplicationPropsBase {
    * deployed as-is and the docker pull/push round-trip is skipped entirely.
    */
   image: string;
+  /** Credentials for pulling a private {@link image}, used instead of an ambient `docker login`. */
+  registry?: ImageRegistry;
 }
 
 /** SSH access to a container application's instances. */
@@ -518,6 +521,8 @@ export interface DurableObjectContainerProps
    * `--platform linux/amd64`, the platform Cloudflare runs.
    */
   image?: string;
+  /** Credentials for pulling a private {@link image}, used instead of an ambient `docker login`. */
+  registry?: ImageRegistry;
   /**
    * Docker build context. Setting `context` or `dockerfile` builds the image;
    * `context` defaults to the current directory.
@@ -577,6 +582,7 @@ export interface AnyContainerApplicationProps extends Omit<
   imageInstall?: ReadonlyArray<string>;
   main?: string;
   image?: string;
+  registry?: ImageRegistry;
   context?: string;
   dockerfile?: string | InlineDockerfile;
   handler?: string;

@@ -109,7 +109,10 @@ export const createContainerApplicationName = (id: string, name: string | undefi
  */
 export const validateContainerImageProps = (
   id: string,
-  props: Pick<AnyContainerApplicationProps, "main" | "image" | "dockerfile" | "context" | "build">,
+  props: Pick<
+    AnyContainerApplicationProps,
+    "main" | "image" | "registry" | "dockerfile" | "context" | "build"
+  >,
 ): Effect.Effect<void> =>
   validateImageSources(props).pipe(
     Effect.andThen(
@@ -119,8 +122,18 @@ export const validateContainerImageProps = (
   );
 
 const validateImageSources = (
-  props: Pick<AnyContainerApplicationProps, "main" | "image" | "dockerfile" | "context">,
+  props: Pick<
+    AnyContainerApplicationProps,
+    "main" | "image" | "registry" | "dockerfile" | "context"
+  >,
 ): Effect.Effect<void> => {
+  if (props.registry !== undefined && (props.image === undefined || props.main)) {
+    return Effect.die(
+      new Error(
+        "`registry` authenticates the pull of a pre-built `image` — declare it only with `image` and without `main`.",
+      ),
+    );
+  }
   const df = props.dockerfile;
   const hasInline = df !== undefined && isInlineDockerfile(df);
   if (props.main) {

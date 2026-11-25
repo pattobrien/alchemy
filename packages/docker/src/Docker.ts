@@ -212,12 +212,16 @@ export class Docker extends Context.Service<
         session?: ScopedPlanStatusSession,
         registry?: RegistryCredentials,
       ) => Effect.Effect<CommandOutput, DockerImagePublicationError>;
-      /** Pulls an image. */
+      /**
+       * Pulls an image. With `credentials`, the pull authenticates through an
+       * isolated docker config instead of the ambient `docker login`.
+       */
       readonly pull: (
         ref: string,
         platform?: string,
         context?: string,
         session?: Pick<ScopedPlanStatusSession, "note">,
+        credentials?: RegistryCredentials,
       ) => Effect.Effect<CommandOutput, PlatformError>;
       /**
        * Pushes an image to a registry. When `platform` is given, only that
@@ -866,55 +870,62 @@ const makeDocker = (options: DockerOptions) =>
       ),
     );
 
+    // Write the registry credentials directly into an isolated docker config
+    // as a plaintext `auths` entry and skip `docker login` entirely.
+    //
+    // `docker login` is the wrong tool here: on macOS Docker Desktop it routes
+    // through the shared `osxkeychain`/`desktop` credential helper *regardless*
+    // of an isolated DOCKER_CONFIG, so concurrent deploys either race the system
+    // keychain (`The specified item already exists in the keychain (-25299)`) or
+    // land the credential in the helper — leaving this isolated config without
+    // an `auths` entry, so the subsequent `docker push` fails with "no basic
+    // auth credentials". Embedding the base64 `auth` inline (the same thing
+    // `docker login` would write when no credsStore is configured) makes each
+    // deploy fully self-contained: no credential helper, no keychain, no login
+    // race. Only `push` and a credentialed `pull` read this config; `build`/`tag`
+    // keep using the global docker config (buildx builders, `docker context`, etc. intact).
+    const isolatedRegistryConfig = Effect.fn(function* (
+      credentials: RegistryCredentials,
+      context: string | undefined,
+    ) {
+      const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-" });
+      // The isolated DOCKER_CONFIG holds none of the CLI's contexts. Ask the CLI
+      // (same environment as the command) which context it would use, and copy just
+      // that context's metadata and TLS material in.
+      const selected =
+        context ??
+        (yield* run(["context", "show"]).pipe(
+          Effect.map((result) => result.stdout),
+          Effect.orElseSucceed(() => "default"),
+        ));
+      if (selected && selected !== "default") {
+        const inspected = yield* runInspect<{
+          Storage: { MetadataPath: string; TLSPath: string };
+        }>(["context", "inspect", selected]);
+        for (const [kind, source] of [
+          ["meta", inspected.Storage.MetadataPath],
+          ["tls", inspected.Storage.TLSPath],
+        ] as const) {
+          if (!(yield* fs.exists(source))) continue;
+          const target = path.join(dir, "contexts", kind, path.basename(source));
+          yield* fs.makeDirectory(path.dirname(target), { recursive: true });
+          yield* fs.copy(source, target);
+        }
+      }
+      const config = yield* Effect.sync(() => {
+        const password = Redacted.isRedacted(credentials.password)
+          ? Redacted.value(credentials.password)
+          : credentials.password;
+        const auth = Buffer.from(`${credentials.username}:${password}`).toString("base64");
+        return JSON.stringify({ auths: { [credentials.server]: { auth } } });
+      });
+      yield* fs.writeFileString(path.join(dir, "config.json"), config);
+      return { dir, context: selected && selected !== "default" ? selected : context };
+    });
+
     const push: Docker["Service"]["image"]["push"] = Effect.fn(
       function* (ref, credentials, platform, context, session) {
-        // Write the registry credentials directly into an isolated docker config
-        // as a plaintext `auths` entry and skip `docker login` entirely.
-        //
-        // `docker login` is the wrong tool here: on macOS Docker Desktop it routes
-        // through the shared `osxkeychain`/`desktop` credential helper *regardless*
-        // of an isolated DOCKER_CONFIG, so concurrent deploys either race the system
-        // keychain (`The specified item already exists in the keychain (-25299)`) or
-        // land the credential in the helper — leaving this isolated config without
-        // an `auths` entry, so the subsequent `docker push` fails with "no basic
-        // auth credentials". Embedding the base64 `auth` inline (the same thing
-        // `docker login` would write when no credsStore is configured) makes each
-        // deploy fully self-contained: no credential helper, no keychain, no login
-        // race. Only `push` reads this config; `build`/`pull`/`tag` keep using the
-        // global docker config (buildx builders, `docker context`, etc. intact).
-        const dir = yield* fs.makeTempDirectoryScoped({ prefix: "alchemy-docker-" });
-        // The isolated DOCKER_CONFIG holds none of the CLI's contexts. Ask the CLI
-        // (same environment as the push) which context it would use, and copy just
-        // that context's metadata and TLS material in.
-        const selected =
-          context ??
-          (yield* run(["context", "show"]).pipe(
-            Effect.map((result) => result.stdout),
-            Effect.orElseSucceed(() => "default"),
-          ));
-        if (selected && selected !== "default") {
-          const inspected = yield* runInspect<{
-            Storage: { MetadataPath: string; TLSPath: string };
-          }>(["context", "inspect", selected]);
-          for (const [kind, source] of [
-            ["meta", inspected.Storage.MetadataPath],
-            ["tls", inspected.Storage.TLSPath],
-          ] as const) {
-            if (!(yield* fs.exists(source))) continue;
-            const target = path.join(dir, "contexts", kind, path.basename(source));
-            yield* fs.makeDirectory(path.dirname(target), { recursive: true });
-            yield* fs.copy(source, target);
-          }
-        }
-        const pushContext = selected && selected !== "default" ? selected : context;
-        const config = yield* Effect.sync(() => {
-          const password = Redacted.isRedacted(credentials.password)
-            ? Redacted.value(credentials.password)
-            : credentials.password;
-          const auth = Buffer.from(`${credentials.username}:${password}`).toString("base64");
-          return JSON.stringify({ auths: { [credentials.server]: { auth } } });
-        });
-        yield* fs.writeFileString(path.join(dir, "config.json"), config);
+        const { dir, context: pushContext } = yield* isolatedRegistryConfig(credentials, context);
         const digestFile = path.join(dir, "digest");
         const digestArgs = (yield* isPodman) ? ["--digestfile", digestFile] : [];
         const result =
@@ -1059,18 +1070,20 @@ const makeDocker = (options: DockerOptions) =>
             ),
           );
         }),
-        pull: (ref, platform, context, session) =>
-          run(
+        pull: Effect.fn(function* (ref, platform, context, session, credentials) {
+          const isolated = credentials && (yield* isolatedRegistryConfig(credentials, context));
+          return yield* run(
             [
-              ...formatArgs({ context }),
+              ...formatArgs({ context: isolated ? isolated.context : context }),
               "image",
               "pull",
               ref,
               ...(platform ? ["--platform", platform] : []),
             ],
-            undefined,
+            isolated && { DOCKER_CONFIG: isolated.dir },
             outputTap(session),
-          ),
+          );
+        }, Effect.scoped),
         inspect: (ref, context) =>
           runInspect<Docker.Image>([...formatArgs({ context }), "image", "inspect", ref]),
         remove: (ref, force, context) =>
