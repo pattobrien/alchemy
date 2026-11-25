@@ -61,5 +61,8 @@ test.provider.skipIf(!hasNamespaceCreds)(
       yield* stack.destroy();
       expect(yield* live).toBeUndefined();
     }),
-  { timeout: 120_000 },
+  {
+    timeout: 120_000,
+    tags: ["provider:namespacelabs", "provider:namespacelabs:devbox-template", "live"],
+  },
 );

@@ -38,5 +38,8 @@ test.provider.skipIf(!hasNamespaceCreds)(
 
       yield* stack.destroy();
     }),
-  { timeout: 120_000 },
+  {
+    timeout: 120_000,
+    tags: ["provider:namespacelabs", "provider:namespacelabs:builder", "live"],
+  },
 );
