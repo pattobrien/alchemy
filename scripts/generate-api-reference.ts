@@ -99,6 +99,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/1password/src",
   },
   {
+    srcRoot: "packages/inngest/src",
+    providerPrefix: "Inngest",
+    sourceDisplayPrefix: "packages/inngest/src",
+  },
+  {
     srcRoot: "packages/turso/src",
     providerPrefix: "Turso",
     sourceDisplayPrefix: "packages/turso/src",

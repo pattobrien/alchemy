@@ -27,6 +27,9 @@
       "path": "./submodules/distilled/packages/turso/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/inngest/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/convex/tsconfig.json"
     },
     {
@@ -140,6 +143,9 @@
     },
     {
       "path": "./packages/1password/tsconfig.json"
+    },
+    {
+      "path": "./packages/inngest/tsconfig.json"
     },
     {
       "path": "./packages/turso/tsconfig.json"

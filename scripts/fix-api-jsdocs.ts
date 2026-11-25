@@ -25,6 +25,7 @@ const packages = [
   "namespacelabs",
   "infisical",
   "1password",
+  "inngest",
   "turso",
   "convex",
   "e2b",
