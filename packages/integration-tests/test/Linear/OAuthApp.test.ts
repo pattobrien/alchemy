@@ -1,0 +1,144 @@
+import * as Linear from "@alchemy.run/linear";
+import { expect } from "@alchemy.run/test";
+import * as Test from "@alchemy.run/test/Alchemy";
+import * as Config from "effect/Config";
+import * as Effect from "effect/Effect";
+import * as Layer from "effect/Layer";
+import * as Redacted from "effect/Redacted";
+import { allNoop, guard, hasLinearCreds, hookUrl, oauthApp, oauthAppIds } from "./workspace.ts";
+
+const local = Test.make({ providers: Linear.providers({ browser: true }) });
+
+const garden = Test.make({
+  providers: Layer.unwrap(
+    Effect.gen(function* () {
+      return Linear.providers({
+        browser: {
+          connect: {
+            cdpUrl: "https://browser.finedesigns.io",
+            headers: {
+              "CF-Access-Client-Id": yield* Config.String("BROWSER_ACCESS_CLIENT_ID"),
+              "CF-Access-Client-Secret": yield* Config.Redacted("BROWSER_ACCESS_CLIENT_SECRET"),
+            },
+          },
+        },
+      });
+    }).pipe(Effect.orDie),
+  ),
+});
+
+const cycle = (name: string) => (stack: Test.ScratchStack) =>
+  Effect.gen(function* () {
+    yield* guard;
+    yield* stack.destroy();
+
+    const app = (webhookResourceTypes: Linear.OAuthAppProps["webhookResourceTypes"]) =>
+      Effect.gen(function* () {
+        const app = yield* Linear.OAuthApp("App", {
+          name,
+          developer: "alchemy",
+          redirectUris: [hookUrl("oauth/callback")],
+          clientCredentials: true,
+          webhookUrl: hookUrl("oauth/webhook"),
+          webhookResourceTypes,
+        });
+        return {
+          applicationId: app.applicationId,
+          clientId: app.clientId,
+          clientSecret: app.clientSecret,
+          webhookSecret: app.webhookSecret,
+        };
+      });
+
+    const v1 = yield* stack.deploy(app(["AgentSessionEvent"]));
+    expect(yield* oauthApp(v1.applicationId)).toEqual({
+      name,
+      developer: "alchemy",
+      developerUrl: "",
+      description: "",
+      clientId: Redacted.value(v1.clientId),
+      redirectUris: [hookUrl("oauth/callback")],
+      clientCredentials: true,
+      webhookUrl: hookUrl("oauth/webhook"),
+      webhookResourceTypes: ["AgentSessionEvent"],
+    });
+    expect(Redacted.value(yield* Effect.fromNullishOr(v1.webhookSecret))).toMatch(/^lin_wh_/);
+    const secret = yield* Effect.fromNullishOr(v1.clientSecret);
+    yield* Linear.clientCredentialsToken({
+      clientId: Redacted.value(v1.clientId),
+      clientSecret: secret,
+      scopes: ["read"],
+    });
+    expect(allNoop(yield* stack.plan(app(["AgentSessionEvent"])))).toBe(true);
+
+    const v2 = yield* stack.deploy(app(["AgentSessionEvent", "Issue", "Comment"]));
+    expect(v2.applicationId).toBe(v1.applicationId);
+    expect(v2.clientSecret && Redacted.value(v2.clientSecret)).toBe(Redacted.value(secret));
+    const live = yield* oauthApp(v2.applicationId);
+    expect(live.webhookResourceTypes.toSorted()).toEqual(["AgentSessionEvent", "Comment", "Issue"]);
+
+    yield* stack.destroy();
+    expect(yield* oauthAppIds).not.toContain(v2.applicationId);
+  });
+
+local.test.provider.skipIf(!hasLinearCreds)(
+  "create, update subscriptions, destroy through a local browser",
+  cycle("a2-spike-oauth-app"),
+  { timeout: 300_000, tags: ["provider:linear", "provider:linear:oauthapp", "live"] },
+);
+
+garden.test.provider.skipIf(!hasLinearCreds)(
+  "create, update subscriptions, destroy through the remote garden browser",
+  cycle("a2-spike-oauth-app-remote"),
+  {
+    timeout: 300_000,
+    tags: ["provider:linear", "provider:linear:oauthapp", "browser", "live"],
+    optInTags: ["browser"],
+  },
+);
+
+garden.test.provider.skipIf(!hasLinearCreds)(
+  "creates three apps at once through the remote garden browser, each with its own credentials",
+  (stack) =>
+    Effect.gen(function* () {
+      yield* guard;
+      yield* stack.destroy();
+      const apps = yield* stack.deploy(
+        Effect.all(
+          [1, 2, 3].map((n) =>
+            Linear.OAuthApp(`App${n}`, {
+              name: `a2-spike-oauth-app-concurrent-${n}`,
+              developer: "alchemy",
+              redirectUris: [hookUrl("oauth/callback")],
+              clientCredentials: true,
+              webhookUrl: hookUrl("oauth/webhook"),
+              webhookResourceTypes: ["AgentSessionEvent"],
+            }),
+          ),
+          { concurrency: "unbounded" },
+        ).pipe(
+          Effect.map((apps) =>
+            apps.map((app) => ({
+              applicationId: app.applicationId,
+              clientId: app.clientId,
+              clientSecret: app.clientSecret,
+            })),
+          ),
+        ),
+      );
+      for (const app of apps) {
+        expect((yield* oauthApp(app.applicationId)).clientId).toBe(Redacted.value(app.clientId));
+        yield* Linear.clientCredentialsToken({
+          clientId: Redacted.value(app.clientId),
+          clientSecret: yield* Effect.fromNullishOr(app.clientSecret),
+          scopes: ["read"],
+        });
+      }
+      yield* stack.destroy();
+    }),
+  {
+    timeout: 300_000,
+    tags: ["provider:linear", "provider:linear:oauthapp", "browser", "live"],
+    optInTags: ["browser"],
+  },
+);
