@@ -25,6 +25,7 @@ export {
   DEFAULT_ENTRYPOINT,
   importStack,
   StackEntrypointError,
+  StackModuleLoader,
   type Target,
 } from "./Entrypoint.ts";
 
