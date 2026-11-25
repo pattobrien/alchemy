@@ -18,7 +18,7 @@ concurrency:
 jobs:
   sync:
     name: Sync
-    runs-on: blacksmith-8vcpu-ubuntu-2404
+    runs-on: namespace-profile-linux-default
     env:
       BRANCH: chore/sync-cloudflare-permission-groups
       CATALOG: packages/cloudflare/src/ApiToken/PermissionGroups.ts
