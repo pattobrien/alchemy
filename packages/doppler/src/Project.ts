@@ -9,7 +9,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { findInPages, ignoreNotFound } from "./Client.ts";
+import { findInPages, ignoreNotFound } from "./internal.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface ProjectProps {

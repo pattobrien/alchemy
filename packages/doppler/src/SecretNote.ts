@@ -3,7 +3,7 @@ import { isResolved } from "alchemy/Diff";
 import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
-import { ignoreNotFound, orUndefined, PAGE_SIZE } from "./Client.ts";
+import { ignoreNotFound, orUndefined, PAGE_SIZE } from "./internal.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface SecretNoteProps {

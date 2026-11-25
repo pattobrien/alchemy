@@ -4,7 +4,7 @@ import * as Provider from "alchemy/Provider";
 import { Resource } from "alchemy/Resource";
 import * as Effect from "effect/Effect";
 import type * as Redacted from "effect/Redacted";
-import { ignoreNotFound, orUndefined, reveal } from "./Client.ts";
+import { ignoreNotFound, orUndefined, reveal } from "./internal.ts";
 import type { Providers } from "./Providers.ts";
 
 export interface SecretProps {
