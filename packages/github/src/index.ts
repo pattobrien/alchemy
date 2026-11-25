@@ -3,6 +3,7 @@ export * from "./BranchProtection.ts";
 export * from "./Collaborator.ts";
 export * from "./Comment.ts";
 export { Credentials, fromApp, fromEnv, fromToken } from "./Credentials.ts";
+export * from "./DependabotSecret.ts";
 export * from "./Env.ts";
 export * from "./Environment.ts";
 export * from "./Label.ts";
