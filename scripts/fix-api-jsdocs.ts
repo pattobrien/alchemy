@@ -22,6 +22,7 @@ const packages = [
   "acme",
   "axiom",
   "doppler",
+  "namespacelabs",
   "infisical",
   "1password",
   "turso",
