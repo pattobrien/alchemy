@@ -604,6 +604,9 @@ catalogs:
     picomatch:
       specifier: ^4.0.7
       version: 4.0.7
+    playwright-core:
+      specifier: ^1.64.0
+      version: 1.64.0
     postal-mime:
       specifier: ^2.4.3
       version: 2.7.5
@@ -9342,6 +9345,9 @@ importers:
       nuxt:
         specifier: 'catalog:'
         version: 4.6.2(5fc4283a51029dce2a1990ef64a18ebd)
+      playwright-core:
+        specifier: 'catalog:'
+        version: 1.64.0
       react:
         specifier: 'catalog:'
         version: 19.3.1
