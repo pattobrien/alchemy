@@ -79,6 +79,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/namespacelabs/src",
   },
   {
+    srcRoot: "packages/tailscale/src",
+    providerPrefix: "Tailscale",
+    sourceDisplayPrefix: "packages/tailscale/src",
+  },
+  {
     srcRoot: "packages/infisical/src",
     providerPrefix: "Infisical",
     sourceDisplayPrefix: "packages/infisical/src",

@@ -11347,6 +11347,9 @@ importers:
       '@alchemy.run/stripe':
         specifier: workspace:*
         version: link:../stripe
+      '@alchemy.run/tailscale':
+        specifier: workspace:*
+        version: link:../tailscale
       '@alchemy.run/test':
         specifier: workspace:*
         version: link:../alchemy-test
@@ -11443,6 +11446,9 @@ importers:
       '@distilled.cloud/stripe':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/stripe
+      '@distilled.cloud/tailscale':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/tailscale
       '@distilled.cloud/turso':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/turso
@@ -12230,6 +12236,28 @@ importers:
       '@alchemy.run/aws':
         specifier: workspace:*
         version: link:../aws
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-beta
+
+  packages/tailscale:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/tailscale':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/tailscale
+    devDependencies:
       '@types/bun':
         specifier: 'catalog:'
         version: 1.4.3
