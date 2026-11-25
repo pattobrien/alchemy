@@ -1,3 +1,24 @@
+import * as AppAuth from "@distilled.cloud/github/App";
+import * as Effect from "effect/Effect";
+import type * as Redacted from "effect/Redacted";
+import { USER_AGENT } from "./Credentials.ts";
+
+export const asGitHubApp =
+  (
+    app: { readonly appId: number; readonly privateKey: Redacted.Redacted<string> },
+    apiBaseUrl: string,
+  ) =>
+  <A, E, R>(effect: Effect.Effect<A, E, R>) =>
+    Effect.provide(
+      effect,
+      AppAuth.appCredentials({
+        appId: app.appId,
+        privateKey: app.privateKey,
+        apiBaseUrl,
+        userAgent: USER_AGENT,
+      }),
+    );
+
 export async function encryptValue(plaintext: string, publicKey: string): Promise<string> {
   const mod = await import("libsodium-wrappers");
   // Bun/ESM interop: the actual sodium API lives on `.default` when the
