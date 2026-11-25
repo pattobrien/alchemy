@@ -29,6 +29,7 @@ Every command runs through your package manager: bun alchemy <command>. Command 
 - [Inspecting State](https://alchemy.run/cli/inspecting-state) — See what alchemy thinks is deployed, debug a bad diff, and recover from bad state.
 - [aws](https://alchemy.run/cli/aws) — AWS provider commands — bootstrap the per-account assets bucket that Lambda deployments rely on.
 - [cloudflare](https://alchemy.run/cli/cloudflare) — Cloudflare provider commands — mint API tokens.
+- [github](https://alchemy.run/cli/github) — GitHub provider commands — sign in to GitHub's web UI once so deploys can drive it unattended.
 
 ## Infrastructure as Code
 
