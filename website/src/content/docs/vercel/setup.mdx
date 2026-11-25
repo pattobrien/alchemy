@@ -1,0 +1,36 @@
+---
+title: Setup
+description: Connect alchemy to Vercel — access token, profiles, and CI.
+---
+
+import PackageManagers from "../../../components/PackageManagers.astro";
+
+Create an access token under
+[Account Settings → Tokens](https://vercel.com/account/settings/tokens).
+Scope it to the team your Stack deploys to, and pick an expiration.
+Install `@alchemy.run/vercel`:
+
+<PackageManagers add="@alchemy.run/vercel" />
+
+Register the provider next to your cloud's:
+
+```typescript
+// alchemy.run.ts
+import * as Vercel from "@alchemy.run/vercel";
+
+providers: Layer.mergeAll(Cloudflare.providers(), Vercel.providers()),
+```
+
+Run `alchemy profile edit --add Vercel` and paste the token. It is
+entered interactively and saved under
+`~/.alchemy/credentials/<profile>/`.
+
+In CI (`CI=true`), profiles are bypassed. Set `VERCEL_TOKEN` to the
+access token; `VERCEL_API_URL` is optional.
+
+See [Profiles](/environments/profiles) for how credentials are stored
+and switched.
+
+## Next steps
+
+- [Vercel overview](/vercel) — resources, adoption, and what is out of scope.
