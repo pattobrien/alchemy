@@ -78,6 +78,9 @@
       "path": "./submodules/distilled/packages/github/tsconfig.json"
     },
     {
+      "path": "./submodules/distilled/packages/tailscale/tsconfig.json"
+    },
+    {
       "path": "./submodules/distilled/packages/acme/tsconfig.json"
     },
     {
@@ -128,6 +131,9 @@
     },
     {
       "path": "./packages/doppler/tsconfig.json"
+    },
+    {
+      "path": "./packages/tailscale/tsconfig.json"
     },
     {
       "path": "./packages/infisical/tsconfig.json"
