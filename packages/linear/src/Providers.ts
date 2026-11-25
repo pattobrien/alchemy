@@ -1,0 +1,91 @@
+import { GraphQLLive } from "@distilled.cloud/linear";
+import { CredentialsStoreLive } from "alchemy/Auth/Credentials";
+import { ProfileStoreLive } from "alchemy/Auth/Profile";
+import * as Provider from "alchemy/Provider";
+import * as FetchHttpClient from "effect/http/FetchHttpClient";
+import type * as HttpClient from "effect/http/HttpClient";
+import * as Layer from "effect/Layer";
+import { LinearAuth } from "./AuthProvider.ts";
+import * as Credentials from "./Credentials.ts";
+import { CustomView, CustomViewProvider } from "./CustomView.ts";
+import { IssueLabel, IssueLabelProvider } from "./IssueLabel.ts";
+import { Team, TeamProvider } from "./Team.ts";
+import { TeamDefaults, TeamDefaultsProvider } from "./TeamDefaults.ts";
+import { TeamLabel, TeamLabelProvider } from "./TeamLabel.ts";
+import { Template, TemplateProvider } from "./Template.ts";
+import { Webhook, WebhookProvider } from "./Webhook.ts";
+import { WorkflowState, WorkflowStateProvider } from "./WorkflowState.ts";
+import { WorkspaceLabel, WorkspaceLabelProvider } from "./WorkspaceLabel.ts";
+
+export class Providers extends Provider.ProviderCollection<Providers>()("Linear") {}
+
+export type ProviderRequirements = Layer.Services<ReturnType<typeof providers>>;
+
+export interface ProvidersOptions {
+  /**
+   * Credentials to act as instead of the AuthProvider's, such as an OAuth
+   * application via {@link Credentials.fromClientCredentials}.
+   */
+  readonly credentials?: Layer.Layer<
+    Credentials.Credentials,
+    never,
+    HttpClient.HttpClient | Layer.Services<ReturnType<typeof Credentials.fromAuthProvider>>
+  >;
+}
+
+/**
+ * Linear providers and credentials. Wires up the Team, TeamDefaults,
+ * WorkflowState, Template, IssueLabel, TeamLabel, WorkspaceLabel, CustomView
+ * and Webhook resources and registers the Linear AuthProvider
+ * so `alchemy profile edit` can configure it. Credentials come from
+ * `LINEAR_API_KEY` when it is set, otherwise from the selected profile.
+ *
+ * Pass `credentials` to act as something else, such as an OAuth application
+ * via {@link Credentials.fromClientCredentials}:
+ *
+ * ```typescript
+ * providers: Linear.providers({
+ *   credentials: Linear.fromClientCredentials({
+ *     clientId: Config.String("LINEAR_CLIENT_ID"),
+ *     clientSecret: Config.Redacted("LINEAR_CLIENT_SECRET"),
+ *     scopes: ["read", "write"],
+ *   }),
+ * })
+ * ```
+ */
+export const providers = ({
+  credentials = Credentials.fromAuthProvider(),
+}: ProvidersOptions = {}) =>
+  Layer.effect(
+    Providers,
+    Provider.collection([
+      Team,
+      TeamDefaults,
+      WorkflowState,
+      Template,
+      IssueLabel,
+      TeamLabel,
+      WorkspaceLabel,
+      CustomView,
+      Webhook,
+    ]),
+  ).pipe(
+    Layer.provide([
+      TeamProvider(),
+      TeamDefaultsProvider(),
+      WorkflowStateProvider(),
+      TemplateProvider(),
+      IssueLabelProvider(),
+      TeamLabelProvider(),
+      WorkspaceLabelProvider(),
+      CustomViewProvider(),
+      WebhookProvider(),
+    ]),
+    Layer.provideMerge(GraphQLLive),
+    Layer.provideMerge(credentials),
+    Layer.provideMerge(FetchHttpClient.layer),
+    Layer.provideMerge(LinearAuth),
+    Layer.provideMerge(ProfileStoreLive),
+    Layer.provideMerge(CredentialsStoreLive),
+    Layer.orDie,
+  );

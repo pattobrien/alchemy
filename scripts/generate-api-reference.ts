@@ -89,6 +89,11 @@ const sourceRoots: SourceRoot[] = [
     sourceDisplayPrefix: "packages/infisical/src",
   },
   {
+    srcRoot: "packages/linear/src",
+    providerPrefix: "Linear",
+    sourceDisplayPrefix: "packages/linear/src",
+  },
+  {
     srcRoot: "packages/archil/src",
     providerPrefix: "Archil",
     sourceDisplayPrefix: "packages/archil/src",

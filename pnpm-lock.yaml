@@ -11311,6 +11311,9 @@ importers:
       '@alchemy.run/kubernetes':
         specifier: workspace:*
         version: link:../kubernetes
+      '@alchemy.run/linear':
+        specifier: workspace:*
+        version: link:../linear
       '@alchemy.run/modal':
         specifier: workspace:*
         version: link:../modal
@@ -11419,6 +11422,9 @@ importers:
       '@distilled.cloud/inngest':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/inngest
+      '@distilled.cloud/linear':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/linear
       '@distilled.cloud/modal':
         specifier: workspace:*
         version: link:../../submodules/distilled/packages/modal
@@ -11762,6 +11768,28 @@ importers:
       '@types/node':
         specifier: 'catalog:'
         version: 26.6.5
+      alchemy:
+        specifier: workspace:*
+        version: link:../alchemy
+      effect:
+        specifier: 4.1.4
+        version: 4.1.4
+      typescript:
+        specifier: 'catalog:'
+        version: 7.1.0-beta
+
+  packages/linear:
+    dependencies:
+      '@distilled.cloud/core':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/core
+      '@distilled.cloud/linear':
+        specifier: workspace:*
+        version: link:../../submodules/distilled/packages/linear
+    devDependencies:
+      '@types/bun':
+        specifier: 'catalog:'
+        version: 1.4.3
       alchemy:
         specifier: workspace:*
         version: link:../alchemy

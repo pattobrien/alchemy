@@ -25,6 +25,7 @@ const packages = [
   "namespacelabs",
   "tailscale",
   "infisical",
+  "linear",
   "1password",
   "inngest",
   "turso",
